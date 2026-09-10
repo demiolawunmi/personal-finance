@@ -248,6 +248,36 @@ it('detects recurring bills, monthly equivalents and price changes', () => {
     monthly_amount_micros: 13990000,
   });
 });
+it('finds a stable subscription hidden among variable purchases', () => {
+  const rows = [
+    effective('s1', -5640000, { date: '2026-07-09', merchant: 'Amazon' }),
+    effective('s2', -5640000, { date: '2026-08-10', merchant: 'Amazon' }),
+    effective('s3', -5640000, { date: '2026-09-09', merchant: 'Amazon' }),
+    effective('p1', -70030000, { date: '2026-06-29', merchant: 'Amazon' }),
+    effective('p2', -22590000, { date: '2026-06-29', merchant: 'Amazon' }),
+    effective('p3', -17500000, { date: '2026-07-02', merchant: 'Amazon' }),
+    effective('p4', -52950000, { date: '2026-07-15', merchant: 'Amazon' }),
+  ];
+  const r = detectRecurring(rows, '2026-09-11');
+  const sub = r.find((s) => s.typical_amount_micros === 5640000);
+  expect(sub).toMatchObject({ frequency: 'monthly', observations: 3, confidence: 0.9 });
+});
+it('accepts a two-observation monthly series only when amounts are close', () => {
+  const close = [
+    effective('a1', -7370000, { date: '2026-07-09', merchant: 'Anomaly' }),
+    effective('a2', -14500000, { date: '2026-08-09', merchant: 'Anomaly' }),
+  ];
+  expect(detectRecurring(close, '2026-08-15')[0]).toMatchObject({
+    frequency: 'monthly',
+    observations: 2,
+    confidence: 0.55,
+  });
+  const far = [
+    effective('b1', -1000000, { date: '2026-07-09', merchant: 'Corner Store' }),
+    effective('b2', -90000000, { date: '2026-08-09', merchant: 'Corner Store' }),
+  ];
+  expect(detectRecurring(far, '2026-08-15')).toHaveLength(0);
+});
 
 it('treats payroll reversals as negative income, not consumption', () => {
   const result = classifyRows([

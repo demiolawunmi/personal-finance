@@ -213,6 +213,7 @@ const PATHS: Record<string, string> = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2 5.5"/><path d="M20 5v6h-6"/>',
   link: '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
+  edit: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 7H6"/>',
   fork: '<path d="M7 3v7a2 2 0 0 0 4 0V3"/><path d="M9 10v11"/><path d="M16 3c-1.5 1-2 2.5-2 4.5S14.8 11 16 11v10"/>',
@@ -1252,7 +1253,8 @@ function noActivity(view: string, d: Any): boolean {
   if (!d || !AGGREGATE.includes(view)) return false;
   if (view === 'overview' || view === 'insights')
     return !d.balances?.accounts?.length && !(d.categories ?? []).length && num(d.income) === 0;
-  if (view === 'recurring') return !(d.series ?? []).length && num(d.monthly_total) === 0;
+  if (view === 'recurring')
+    return !(d.series ?? []).length && !(d.possible ?? []).length && num(d.monthly_total) === 0;
   if (view === 'budget') return !(d.categories ?? []).length;
   return false;
 }
@@ -2711,10 +2713,32 @@ function RecurringView({
       </section>
       <Card
         title="Subscriptions and bills"
-        extra={<span className="quiet">At least three consistent charges</span>}
+        extra={<span className="quiet">Three or more consistent charges</span>}
       >
         {rows.length ? rows : <p className="quiet">No recurring series detected yet.</p>}
       </Card>
+      {(d.possible ?? []).length > 0 && (
+        <Card
+          title="Possibly recurring"
+          extra={<span className="quiet">Only two charges so far · excluded from the total</span>}
+        >
+          {(d.possible ?? []).map((r: Any) => (
+            <div className="row" key={r.id}>
+              <span className="avatar">
+                <Icon name="repeat" />
+              </span>
+              <span className="od-fill">
+                <span className="row-title">{r.merchant}</span>
+                <span className="row-sub">
+                  {label(r.frequency)} · last {fmtDateLong(r.last_seen)} ·{' '}
+                  {Math.round(r.confidence * 100)}% confidence
+                </span>
+              </span>
+              <span className="row-amount tnum">{fmtMoney(r.amount)}</span>
+            </div>
+          ))}
+        </Card>
+      )}
       <p className="quiet">
         Recurring detection uses observation intervals and amount tolerance; it is not a guarantee
         of a future bill.
@@ -3133,6 +3157,23 @@ function AccountsView({
                       {a.available ? ' · ' + fmtMoney(a.available) + ' available' : ''}
                     </span>
                   </span>
+                  <button
+                    className="icon-btn"
+                    aria-label="Rename account"
+                    title="Rename account"
+                    disabled={busy || demo}
+                    onClick={() => {
+                      const next = prompt('Account name', a.name);
+                      if (next === null) return;
+                      void mutate(
+                        `/api/accounts/${a.id}`,
+                        { name: next.trim() || null },
+                        'PATCH',
+                      );
+                    }}
+                  >
+                    <Icon name="edit" />
+                  </button>
                   <span className="row-amount tnum">{fmtMoney(a.current)}</span>
                 </div>
               ))}

@@ -369,7 +369,7 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
     classification_source: string;
   }>(
     db,
-    `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,a.name account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE ${clauses.join(' AND ')} ORDER BY t.date DESC,t.id DESC LIMIT ?`,
+    `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE ${clauses.join(' AND ')} ORDER BY t.date DESC,t.id DESC LIMIT ?`,
     ...params,
     limit + 1,
   );
@@ -396,7 +396,7 @@ export async function balances(db: Database, currency: string, asOf = new Date()
     observed_at: string | null;
   }>(
     db,
-    `SELECT a.id,a.name,a.type,a.is_active,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=?`,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.is_active,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=?`,
     currency,
     asOf,
     currency,
@@ -440,38 +440,45 @@ export async function balances(db: Database, currency: string, asOf = new Date()
 }
 export async function recurring(db: Database, currency: string) {
   await ensureDerived(db);
-  const rows = await all<{
+  const shape = (r: {
     id: string;
     canonical_merchant: string;
     frequency: string;
     typical_amount_micros: number;
     previous_amount_micros: number;
-    monthly_amount_micros: number;
     next_expected_date: string;
     confidence: number;
-    status: string;
     first_seen: string;
     last_seen: string;
-  }>(
+  }) => ({
+    id: r.id,
+    merchant: r.canonical_merchant,
+    frequency: r.frequency,
+    amount: money(r.typical_amount_micros, currency),
+    previous_amount: money(r.previous_amount_micros, currency),
+    price_change: money(r.typical_amount_micros - r.previous_amount_micros, currency),
+    next_expected_date: r.next_expected_date,
+    confidence: r.confidence,
+    first_seen: r.first_seen,
+    last_seen: r.last_seen,
+  });
+  const active = await all<Parameters<typeof shape>[0] & { monthly_amount_micros: number }>(
     db,
     'SELECT * FROM recurring_series WHERE currency=? AND status=? ORDER BY next_expected_date LIMIT 100',
     currency,
     'active',
   );
+  // Two-observation candidates: useful to surface but not yet a commitment.
+  const possible = await all<Parameters<typeof shape>[0]>(
+    db,
+    'SELECT * FROM recurring_series WHERE currency=? AND status=? ORDER BY last_seen DESC LIMIT 100',
+    currency,
+    'possible',
+  );
   return {
-    monthly_total: money(sum(rows.map((r) => r.monthly_amount_micros)), currency),
-    series: rows.map((r) => ({
-      id: r.id,
-      merchant: r.canonical_merchant,
-      frequency: r.frequency,
-      amount: money(r.typical_amount_micros, currency),
-      previous_amount: money(r.previous_amount_micros, currency),
-      price_change: money(r.typical_amount_micros - r.previous_amount_micros, currency),
-      next_expected_date: r.next_expected_date,
-      confidence: r.confidence,
-      first_seen: r.first_seen,
-      last_seen: r.last_seen,
-    })),
+    monthly_total: money(sum(active.map((r) => r.monthly_amount_micros)), currency),
+    series: active.map(shape),
+    possible: possible.map(shape),
   };
 }
 export async function budget(db: Database, p: Period, asOf = today()) {
@@ -833,7 +840,7 @@ export async function balanceAttention(db: Database, p: Period) {
     previous_at: string;
   }>(
     db,
-    `SELECT a.id,a.name,a.type,n.current_amount_micros current,b.current_amount_micros previous,n.observed_at,b.observed_at previous_at FROM accounts a JOIN balance_snapshots n ON n.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<n.observed_at ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? AND n.current_amount_micros IS NOT NULL AND b.current_amount_micros IS NOT NULL AND substr(n.observed_at,1,10)>=?`,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,n.current_amount_micros current,b.current_amount_micros previous,n.observed_at,b.observed_at previous_at FROM accounts a JOIN balance_snapshots n ON n.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<n.observed_at ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? AND n.current_amount_micros IS NOT NULL AND b.current_amount_micros IS NOT NULL AND substr(n.observed_at,1,10)>=?`,
     p.currency,
     p.end_date + 'T23:59:59.999Z',
     p.currency,

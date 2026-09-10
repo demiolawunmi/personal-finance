@@ -272,6 +272,32 @@ it('clears the duplicate-charge notice once the anomaly is reviewed', async () =
     close();
   }
 });
+it('renames an account and can reset the label', async () => {
+  const { env, request, close } = await setup();
+  try {
+    const saved = await dashboardApi(
+      request('/api/accounts/checking', 'PATCH', { name: 'Everyday chequing' }),
+      env,
+    );
+    expect(((await saved.json()) as any).saved).toBe(true);
+    const balances = (await (
+      await dashboardApi(request('/api/balances?currency=CAD', 'GET'), env)
+    ).json()) as any;
+    expect(balances.accounts.find((a: any) => a.id === 'checking').name).toBe('Everyday chequing');
+
+    await dashboardApi(request('/api/accounts/checking', 'PATCH', { name: null }), env);
+    const reset = (await (
+      await dashboardApi(request('/api/balances?currency=CAD', 'GET'), env)
+    ).json()) as any;
+    expect(reset.accounts.find((a: any) => a.id === 'checking').name).toBe('checking');
+
+    await expect(
+      dashboardApi(request('/api/accounts/missing', 'PATCH', { name: 'x' }), env),
+    ).rejects.toThrow('ACCOUNT_NOT_FOUND');
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);

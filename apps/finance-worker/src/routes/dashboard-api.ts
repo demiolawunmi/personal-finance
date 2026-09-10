@@ -265,6 +265,29 @@ export async function dashboardApi(request: Request, env: AppEnv) {
     ]);
     return Response.json({ saved: true });
   }
+  const account = /^\/api\/accounts\/([^/]+)$/.exec(path);
+  if (request.method === 'PATCH' && account) {
+    const b = z
+      .object({ name: z.string().trim().max(100).nullable() })
+      .strict()
+      .parse(body ?? {});
+    invariant(
+      await first(env.DB, 'SELECT id FROM accounts WHERE id=?', account[1]),
+      404,
+      'ACCOUNT_NOT_FOUND',
+    );
+    await env.DB.batch([
+      stmt(
+        env.DB,
+        'UPDATE accounts SET custom_name=?,updated_at=? WHERE id=?',
+        b.name ? b.name : null,
+        new Date().toISOString(),
+        account[1],
+      ),
+      auditStatement(env.DB, 'ACCOUNT_RENAMED', 'account', account[1], s.user_id),
+    ]);
+    return Response.json({ saved: true });
+  }
   const annotation = /^\/api\/transactions\/([^/]+)\/annotation$/.exec(path);
   if (request.method === 'PATCH' && annotation) {
     const schema = z
