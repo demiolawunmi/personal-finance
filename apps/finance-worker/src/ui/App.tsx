@@ -726,7 +726,7 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  const navigate = (next: string) => {
+  const navigate = (next: string, filter?: { status?: string; fullYear?: boolean }) => {
     setView(next);
     setSelectedTx(null);
     setCommand(false);
@@ -734,7 +734,13 @@ export default function App() {
     setCursor(null);
     setFilterCategory('');
     setFilterAccount('');
-    setFilterStatus('');
+    setFilterStatus(filter?.status ?? '');
+    if (filter?.fullYear)
+      setRange({
+        start: addDaysISO(todayISO(), -364),
+        end: todayISO(),
+        label: 'Last 12 months',
+      });
     setNotice('');
     history.pushState(null, '', VIEW_PATH[next] ?? '/');
   };
@@ -1522,7 +1528,13 @@ const NOTICE_ICON: Record<string, string> = {
   success: 'check',
   info: 'info',
 };
-function NoticeStack({ d, nav }: { d: Any; nav: (v: string) => void }) {
+function NoticeStack({
+  d,
+  nav,
+}: {
+  d: Any;
+  nav: (v: string, filter?: { status?: string; fullYear?: boolean }) => void;
+}) {
   const notices: Any[] = d?.data_freshness?.notices ?? d?.notices ?? [];
   const [dismissed, setDismissed] = useState<string[]>(() => {
     try {
@@ -1558,7 +1570,14 @@ function NoticeStack({ d, nav }: { d: Any; nav: (v: string) => void }) {
               <button
                 className="btn btn-sm"
                 style={{ marginLeft: 'var(--sp-2)' }}
-                onClick={() => nav(n.view)}
+                onClick={() =>
+                  nav(
+                    n.view,
+                    n.id === 'unknown-inflows'
+                      ? { status: 'unclassified', fullYear: true }
+                      : undefined,
+                  )
+                }
               >
                 {n.action_label}
               </button>
@@ -2218,6 +2237,7 @@ function TransactionsView(props: {
             <option value="">All statuses</option>
             <option value="settled">Settled</option>
             <option value="pending">Pending</option>
+            <option value="unclassified">Needs classification</option>
             <option value="excluded">Excluded</option>
           </select>
         </div>

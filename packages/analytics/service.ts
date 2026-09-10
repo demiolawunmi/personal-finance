@@ -309,6 +309,7 @@ export type Search = {
   query?: string;
   account_id?: string;
   category_id?: string;
+  kind?: string;
   pending?: boolean;
   excluded?: boolean;
   limit?: number;
@@ -332,6 +333,10 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
   if (s.category_id) {
     clauses.push('t.category_id=?');
     params.push(s.category_id);
+  }
+  if (s.kind) {
+    clauses.push('t.kind=?');
+    params.push(s.kind);
   }
   if (s.pending !== undefined) {
     clauses.push('t.pending=?');

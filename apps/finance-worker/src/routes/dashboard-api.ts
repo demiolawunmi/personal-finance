@@ -133,6 +133,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
           category_id: url.searchParams.get('category_id') ?? undefined,
           account_id: url.searchParams.get('account_id') ?? undefined,
           limit: Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 50)),
+          ...(status === 'unclassified' ? { kind: 'unclassified_inflow' } : {}),
           ...(status === 'pending'
             ? { pending: true }
             : status === 'settled'

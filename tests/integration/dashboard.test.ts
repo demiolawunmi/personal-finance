@@ -207,8 +207,33 @@ it('surfaces all-time open signals and dynamic notices', async () => {
     close();
   }
 });
-it('explains missing local GitHub OAuth configuration at sign-in', async () => {
-  const { env, close } = await setup();
+it('filters the transaction list to unclassified inflows for the classify action', async () => {
+  const { db, env, request, close } = await setup();
+  const q = '?currency=CAD&start_date=2026-09-01&end_date=2026-09-30';
+  try {
+    await insert(
+      db,
+      'transactions',
+      tx('inflow', 50000000, { date: '2026-09-10', name: 'ONLINE DEPOSIT' }),
+    ).run();
+    await insert(
+      db,
+      'transactions',
+      tx('spend', -50000000, { date: '2026-09-11', name: 'GROCERY STORE' }),
+    ).run();
+    await rebuild(db);
+    const filtered = (await (
+      await dashboardApi(request('/api/transactions' + q + '&status=unclassified', 'GET'), env)
+    ).json()) as any;
+    const ids = filtered.transactions.map((t: any) => t.id);
+    expect(ids).toContain('inflow');
+    expect(ids).not.toContain('spend');
+    expect(filtered.transactions.every((t: any) => t.kind === 'unclassified_inflow')).toBe(true);
+  } finally {
+    close();
+  }
+});
+it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);
     expect(response?.status).toBe(503);
