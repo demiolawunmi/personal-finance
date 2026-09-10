@@ -233,6 +233,45 @@ it('filters the transaction list to unclassified inflows for the classify action
     close();
   }
 });
+it('clears the duplicate-charge notice once the anomaly is reviewed', async () => {
+  const { db, env, request, close } = await setup();
+  const query = '?currency=CAD&start_date=2026-09-01&end_date=2026-09-30';
+  try {
+    await insert(
+      db,
+      'transactions',
+      tx('dup-a', -100000000, { date: '2026-09-01', merchant_name: 'Amazon', name: 'AMAZON' }),
+    ).run();
+    await insert(
+      db,
+      'transactions',
+      tx('dup-b', -100000000, { date: '2026-09-02', merchant_name: 'Amazon', name: 'AMAZON' }),
+    ).run();
+    await rebuild(db);
+    const before = (await (
+      await dashboardApi(request('/api/data-health', 'GET'), env)
+    ).json()) as any;
+    const dupNotice = before.notices.find((n: any) => n.id === 'duplicate-candidates');
+    expect(dupNotice).toBeTruthy();
+    expect(dupNotice.title).toContain('1 possible duplicate');
+
+    const list = (await (
+      await dashboardApi(request('/api/anomalies' + query, 'GET'), env)
+    ).json()) as any;
+    const anomaly = list.anomalies.find((a: any) => a.kind === 'duplicate_candidate');
+    await dashboardApi(
+      request(`/api/anomalies/${anomaly.id}/review`, 'POST', { status: 'reviewed' }),
+      env,
+    );
+
+    const after = (await (
+      await dashboardApi(request('/api/data-health', 'GET'), env)
+    ).json()) as any;
+    expect(after.notices.find((n: any) => n.id === 'duplicate-candidates')).toBeFalsy();
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);

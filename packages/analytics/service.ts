@@ -62,7 +62,7 @@ export async function dataHealth(db: Database) {
     disappeared_accounts: number;
   }>(
     db,
-    `SELECT (SELECT COUNT(*) FROM effective_transactions WHERE kind='unclassified_inflow' AND pending=0) unknown_inflows,(SELECT COUNT(*) FROM anomalies WHERE kind='duplicate_candidate') duplicate_candidates,(SELECT COUNT(*) FROM accounts a JOIN plaid_items i ON i.id=a.plaid_item_id WHERE a.is_active=0 AND i.disconnected_at IS NULL) disappeared_accounts`,
+    `SELECT (SELECT COUNT(*) FROM effective_transactions WHERE kind='unclassified_inflow' AND pending=0) unknown_inflows,(SELECT COUNT(*) FROM anomalies a LEFT JOIN anomaly_reviews r ON r.anomaly_id=a.id WHERE a.kind='duplicate_candidate' AND (r.status IS NULL OR r.status='open')) duplicate_candidates,(SELECT COUNT(*) FROM accounts a JOIN plaid_items i ON i.id=a.plaid_item_id WHERE a.is_active=0 AND i.disconnected_at IS NULL) disappeared_accounts`,
   );
   const mismatch = rev.data_revision !== rev.derived_revision;
   const status =
