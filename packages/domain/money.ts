@@ -1,6 +1,6 @@
 /** Integer micros are the storage boundary; decimal strings are the wire boundary. */
 export const SCALE = 1_000_000n;
-export function micros(value: string | number): number {
+export function micros(value: string | number, options?: { round?: boolean }): number {
   const raw = String(value);
   const m = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(raw);
   if (!m) throw new Error('INVALID_MONEY');
@@ -11,8 +11,14 @@ export function micros(value: string | number): number {
   if (exponent >= 0) n *= 10n ** BigInt(exponent);
   else {
     const divisor = 10n ** BigInt(-exponent);
-    if (n % divisor) throw new Error('SUB_MICRO_PRECISION');
-    n /= divisor;
+    const remainder = n % divisor;
+    if (remainder) {
+      // Provider amounts (Plaid JSON numbers) can carry sub-micro precision,
+      // e.g. fractional investment balances. Round half away from zero at that
+      // boundary; user-entered decimal strings stay strict by default.
+      if (!options?.round) throw new Error('SUB_MICRO_PRECISION');
+      n = n / divisor + (remainder * 2n >= divisor ? 1n : 0n);
+    } else n /= divisor;
   }
   if (m[1] === '-') n = -n;
   return safe(n);

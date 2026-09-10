@@ -27,6 +27,13 @@ describe('exact money', () => {
     expect(() => micros('9007199254.740992')).toThrow();
     expect(() => sum([Number.MAX_SAFE_INTEGER, 1])).toThrow();
   });
+  it('rounds provider sub-micro precision half away from zero when asked', () => {
+    expect(micros('0.0000005', { round: true })).toBe(1);
+    expect(micros('0.0000004', { round: true })).toBe(0);
+    expect(micros('-0.0000005', { round: true })).toBe(-1);
+    expect(micros(12.3456789, { round: true })).toBe(12345679);
+    expect(micros('12.34', { round: true })).toBe(12340000);
+  });
 });
 describe('classification', () => {
   it('pairs card payments without counting consumption twice', () => {

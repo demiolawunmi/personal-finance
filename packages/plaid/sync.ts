@@ -1,3 +1,4 @@
+import { ZodError } from 'zod';
 import { all, first, stmt, insert, auditStatement, type Database } from '../db/repository';
 import { micros } from '../domain/money';
 import { decrypt } from '../security/crypto';
@@ -83,7 +84,7 @@ export function normalize(
   id: string,
   now: string,
 ): Transaction {
-  const amount = micros(t.amount);
+  const amount = micros(t.amount, { round: true });
   return {
     id,
     plaid_transaction_id: t.transaction_id,
@@ -147,10 +148,12 @@ export function accountStatements(
         {
           id: crypto.randomUUID(),
           account_id: id,
-          current_amount_micros: a.balances.current === null ? null : micros(a.balances.current),
+          current_amount_micros:
+            a.balances.current === null ? null : micros(a.balances.current, { round: true }),
           available_amount_micros:
-            a.balances.available === null ? null : micros(a.balances.available),
-          limit_amount_micros: a.balances.limit == null ? null : micros(a.balances.limit),
+            a.balances.available === null ? null : micros(a.balances.available, { round: true }),
+          limit_amount_micros:
+            a.balances.limit == null ? null : micros(a.balances.limit, { round: true }),
           currency,
           observed_at: now,
           source_updated_at: a.balances.last_updated_datetime ?? null,
@@ -160,6 +163,27 @@ export function accountStatements(
     );
   }
   return statements;
+}
+// Converts any thrown value into a stable, non-sensitive diagnostic. Field
+// paths and Zod issue codes are safe; response values and messages are not.
+function diagnostic(error: unknown): { code: string; detail: string } {
+  if (error instanceof PlaidError) return { code: error.code, detail: error.code };
+  if (error instanceof ZodError)
+    return {
+      code: 'SCHEMA_MISMATCH',
+      detail:
+        'SCHEMA_MISMATCH:' +
+        error.issues
+          .slice(0, 3)
+          .map((i) => `${i.path.join('.') || '(root)'}:${i.code}`)
+          .join('|'),
+    };
+  if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message))
+    return { code: error.message, detail: error.message };
+  return {
+    code: 'SYNC_FAILED',
+    detail: error instanceof Error ? `SYNC_FAILED:${error.name}` : 'SYNC_FAILED',
+  };
 }
 export async function syncItem(db: Database, client: PlaidClient, keys: TokenKeys, itemId: string) {
   const item = await first<Item>(db, 'SELECT * FROM plaid_items WHERE id=?', itemId);
@@ -305,14 +329,15 @@ export async function syncItem(db: Database, client: PlaidClient, keys: TokenKey
     );
     await db.batch(statements);
   } catch (error) {
-    const code = error instanceof PlaidError ? error.code : 'SYNC_FAILED';
+    const { code, detail } = diagnostic(error);
     const status = code === 'ITEM_LOGIN_REQUIRED' ? 'reauth_required' : 'error';
+    console.error(JSON.stringify({ event: 'SYNC_FAILED', item_id: itemId, code, detail }));
     await db.batch([
       stmt(
         db,
         'UPDATE sync_runs SET status=?,error_code=?,completed_at=? WHERE id=?',
         'failed',
-        code,
+        detail,
         new Date().toISOString(),
         owner,
       ),
