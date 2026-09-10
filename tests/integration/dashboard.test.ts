@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { database, seedAccounts } from '../fixtures/database';
 import { tx } from '../fixtures/transactions';
-import { insert, first } from '../../packages/db/repository';
+import { insert, first, all } from '../../packages/db/repository';
 import { rebuild } from '../../packages/db/derive';
 import { sha256 } from '../../packages/security/crypto';
 import { dashboardApi } from '../../apps/finance-worker/src/routes/dashboard-api';
@@ -294,6 +294,42 @@ it('renames an account and can reset the label', async () => {
     await expect(
       dashboardApi(request('/api/accounts/missing', 'PATCH', { name: 'x' }), env),
     ).rejects.toThrow('ACCOUNT_NOT_FOUND');
+  } finally {
+    close();
+  }
+});
+it('renames a merchant across transactions through a global alias', async () => {
+  const { db, env, request, close } = await setup();
+  try {
+    await insert(
+      db,
+      'transactions',
+      tx('m1', -1000000, { date: '2026-09-01', name: 'OPOS LONDON', merchant_name: 'Opos London' }),
+    ).run();
+    await insert(
+      db,
+      'transactions',
+      tx('m2', -1000000, { date: '2026-09-02', name: 'OPOS LONDON', merchant_name: 'Opos London' }),
+    ).run();
+    await rebuild(db);
+    await dashboardApi(
+      request('/api/transactions/m1/annotation', 'PATCH', {
+        merchant_override: 'London Hydro',
+        rename_merchant: true,
+      }),
+      env,
+    );
+    const alias = await first<{ canonical_merchant: string; raw_pattern: string }>(
+      db,
+      "SELECT canonical_merchant,raw_pattern FROM merchant_aliases WHERE canonical_merchant='London Hydro'",
+    );
+    expect(alias).toMatchObject({ raw_pattern: 'Opos London' });
+    const facts = await all<{ transaction_id: string; merchant: string }>(
+      db,
+      'SELECT transaction_id,merchant FROM transaction_facts',
+    );
+    expect(facts.find((f) => f.transaction_id === 'm2')?.merchant).toBe('London Hydro');
+    expect(facts.find((f) => f.transaction_id === 'm1')?.merchant).toBe('London Hydro');
   } finally {
     close();
   }

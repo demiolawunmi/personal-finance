@@ -298,14 +298,16 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         exclude_from_spending: z.boolean().optional(),
         exclude_reason: z.string().max(300).nullable().optional(),
         note: z.string().max(2000).nullable().optional(),
+        rename_merchant: z.boolean().optional(),
       })
       .strict();
-    const patch = schema.parse(body);
-    invariant(
-      await first(env.DB, 'SELECT id FROM transactions WHERE id=?', annotation[1]),
-      404,
-      'TRANSACTION_NOT_FOUND',
+    const { rename_merchant, ...patch } = schema.parse(body);
+    const tx = await first<{ merchant_name: string | null; name: string }>(
+      env.DB,
+      'SELECT merchant_name,name FROM transactions WHERE id=?',
+      annotation[1],
     );
+    invariant(tx, 404, 'TRANSACTION_NOT_FOUND');
     const existing = await first<Record<string, unknown>>(
       env.DB,
       'SELECT * FROM transaction_annotations WHERE transaction_id=?',
@@ -324,7 +326,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       updated_at: new Date().toISOString(),
     };
     row.exclude_from_spending = Number(row.exclude_from_spending);
-    await env.DB.batch([
+    const statements = [
       insert(
         env.DB,
         'transaction_annotations',
@@ -338,7 +340,24 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       auditStatement(env.DB, 'MANUAL_CATEGORY_CHANGED', 'transaction', annotation[1], s.user_id, {
         fields: Object.keys(patch),
       }),
-    ]);
+    ];
+    // A global rename: future and existing charges from the same raw descriptor
+    // normalise to the chosen name, so recurring groups them together.
+    if (rename_merchant && patch.merchant_override) {
+      const raw = (tx.merchant_name || tx.name).trim();
+      statements.push(
+        stmt(env.DB, 'DELETE FROM merchant_aliases WHERE lower(raw_pattern)=lower(?)', raw),
+        insert(env.DB, 'merchant_aliases', {
+          id: crypto.randomUUID(),
+          raw_pattern: raw,
+          canonical_merchant: patch.merchant_override,
+          confidence: 0.99,
+          source: 'manual',
+          created_at: new Date().toISOString(),
+        }),
+      );
+    }
+    await env.DB.batch(statements);
     await env.JOBS.send({ type: 'REBUILD_AGGREGATES' });
     return Response.json({ saved: true });
   }

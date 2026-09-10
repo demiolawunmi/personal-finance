@@ -278,6 +278,35 @@ it('accepts a two-observation monthly series only when amounts are close', () =>
   ];
   expect(detectRecurring(far, '2026-08-15')).toHaveLength(0);
 });
+it('detects a variable-amount monthly bill with one irregular interval', () => {
+  const rows = [
+    effective('e1', -83410000, {
+      date: '2026-06-15',
+      merchant: 'Bill Payment ENBRIDGE',
+      category_id: 'utilities',
+    }),
+    effective('e2', -4300000, {
+      date: '2026-07-14',
+      merchant: 'Bill Payment ENBRIDGE',
+      category_id: 'utilities',
+    }),
+    effective('e3', -32670000, {
+      date: '2026-08-18',
+      merchant: 'Bill Payment ENBRIDGE',
+      category_id: 'utilities',
+    }),
+    effective('e4', -32670000, {
+      date: '2026-09-04',
+      merchant: 'Bill Payment ENBRIDGE',
+      category_id: 'utilities',
+    }),
+  ];
+  expect(
+    detectRecurring(rows, '2026-09-10').find(
+      (s) => s.canonical_merchant === 'Bill Payment ENBRIDGE',
+    ),
+  ).toMatchObject({ frequency: 'monthly', status: 'active' });
+});
 
 it('treats payroll reversals as negative income, not consumption', () => {
   const result = classifyRows([

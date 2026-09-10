@@ -594,7 +594,7 @@ export async function openSignals(db: Database, currency: string) {
     }>(
       db,
       `SELECT id,canonical_merchant,typical_amount_micros,previous_amount_micros,last_seen FROM recurring_series
-        WHERE currency=? AND status='active' AND typical_amount_micros>COALESCE(previous_amount_micros,typical_amount_micros)
+        WHERE currency=? AND status='active' AND amount_variance<0.15 AND typical_amount_micros>COALESCE(previous_amount_micros,typical_amount_micros)
         ORDER BY (typical_amount_micros-COALESCE(previous_amount_micros,typical_amount_micros)) DESC LIMIT 50`,
       currency,
     ),

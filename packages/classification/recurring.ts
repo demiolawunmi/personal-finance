@@ -28,9 +28,22 @@ function amountClusters(rows: EffectiveTransaction[]) {
   if (current.length) clusters.push(current);
   return clusters;
 }
+// Household bills recur on a schedule but their amounts move with usage and
+// season (hydro, gas, insurance). Cadence still proves recurrence; the amount
+// tolerance must not reject them.
+const BILL_CATEGORIES = new Set([
+  'housing',
+  'utilities',
+  'insurance',
+  'subscriptions',
+  'financial_fees',
+  'taxes',
+]);
 function matchSeries(rows: EffectiveTransaction[], asOf: string, id: string) {
   const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length < 2) return null;
+  const last = sorted.at(-1)!;
+  const billLike = BILL_CATEGORIES.has(last.category_id);
   const gaps = sorted.slice(1).map((r, i) => dayDiff(sorted[i].date, r.date));
   const options = [
     ['weekly', 6, 8, 7, 52],
@@ -38,20 +51,20 @@ function matchSeries(rows: EffectiveTransaction[], asOf: string, id: string) {
     ['monthly', 25, 35, 30, 12],
     ['annual', 350, 380, 365, 1],
   ] as const;
+  const threshold = billLike ? 0.6 : 0.8;
   const match = options.find(
-    ([, min, max]) => gaps.filter((g) => g >= min && g <= max).length / gaps.length >= 0.8,
+    ([, min, max]) => gaps.filter((g) => g >= min && g <= max).length / gaps.length >= threshold,
   );
   if (!match) return null;
   const [frequency, , , days, perYear] = match;
   const amounts = sorted.map((t) => -t.cashflow_amount_micros);
   const typical = median(amounts);
   const variance = typical ? Math.max(...amounts.map((a) => Math.abs(a - typical) / typical)) : 0;
-  if (variance > 0.6) return null;
+  if (variance > (billLike ? 2.5 : 0.6)) return null;
   // Two observations are only accepted when the amounts are close; otherwise a
   // repeated pair of purchases would masquerade as a subscription. They are
   // marked 'possible' so they do not inflate the committed monthly total.
   if (sorted.length < 3 && variance > 0.35) return null;
-  const last = sorted.at(-1)!;
   let next = addDays(last.date, days);
   if (frequency === 'monthly' || frequency === 'annual') {
     const d = new Date(last.date);
@@ -76,7 +89,8 @@ function matchSeries(rows: EffectiveTransaction[], asOf: string, id: string) {
     monthly_amount_micros: safe((BigInt(amounts.at(-1)!) * BigInt(perYear) + 6n) / 12n),
     amount_variance: variance,
     next_expected_date: next,
-    confidence: sorted.length < 3 ? 0.55 : variance < 0.15 ? 0.9 : 0.7,
+    confidence:
+      sorted.length < 3 ? 0.55 : billLike && variance > 0.6 ? 0.6 : variance < 0.15 ? 0.9 : 0.7,
     status:
       sorted.length < 3 ? 'possible' : dayDiff(last.date, asOf) > days * 2 ? 'inactive' : 'active',
     first_seen: sorted[0].date,

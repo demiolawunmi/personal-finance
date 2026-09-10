@@ -1435,6 +1435,7 @@ function TxDrawer({
                 category_override_id: String(f.get('category')) || null,
                 exclude_from_spending: f.get('exclude') === 'on',
                 note: String(f.get('note')) || null,
+                rename_merchant: f.get('rename') === 'on',
               });
               if (ok) onClose();
             }}
@@ -1449,6 +1450,10 @@ function TxDrawer({
                 defaultValue={annotation?.merchant_override ?? ''}
                 placeholder={t.merchant}
               />
+              <label className="checkbox" style={{ marginTop: 'var(--sp-2)' }}>
+                <input type="checkbox" name="rename" /> Apply this name to all "{t.merchant}"
+                charges, past and future
+              </label>
             </div>
             <div className="field">
               <label htmlFor="a-category">Category</label>
