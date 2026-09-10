@@ -744,10 +744,22 @@ export async function largestTransactions(db: Database, p: Period) {
     id: string;
     date: string;
     merchant: string;
+    name: string;
     cashflow_amount_micros: number;
+    currency: string;
+    account_id: string;
+    account_name: string | null;
+    category_id: string;
+    kind: string;
+    pending: number;
+    excluded: number;
+    classification_source: string;
   }>(
     db,
-    "SELECT id,date,merchant,cashflow_amount_micros FROM effective_transactions WHERE date BETWEEN ? AND ? AND currency=? AND pending=0 AND excluded=0 AND kind='spending' ORDER BY cashflow_amount_micros LIMIT 10",
+    `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
+       FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id
+      WHERE t.date BETWEEN ? AND ? AND t.currency=? AND t.pending=0 AND t.excluded=0 AND t.kind='spending'
+      ORDER BY t.cashflow_amount_micros LIMIT 10`,
     p.start_date,
     p.end_date,
     p.currency,
@@ -755,6 +767,8 @@ export async function largestTransactions(db: Database, p: Period) {
   return rows.map(({ cashflow_amount_micros, ...r }) => ({
     ...r,
     amount: money(cashflow_amount_micros, p.currency),
+    pending: !!r.pending,
+    excluded: !!r.excluded,
   }));
 }
 

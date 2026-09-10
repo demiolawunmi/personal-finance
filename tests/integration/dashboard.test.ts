@@ -334,6 +334,34 @@ it('renames a merchant across transactions through a global alias', async () => 
     close();
   }
 });
+it('returns full details for largest transactions so the drawer can render', async () => {
+  const { db, env, request, close } = await setup();
+  const q = '?currency=CAD&start_date=2026-09-01&end_date=2026-09-30';
+  try {
+    await insert(
+      db,
+      'transactions',
+      tx('big', -123450000, {
+        date: '2026-09-05',
+        name: 'BIG STORE',
+        merchant_name: 'Big Store',
+      }),
+    ).run();
+    await rebuild(db);
+    const d = (await (
+      await dashboardApi(request('/api/spending' + q, 'GET'), env)
+    ).json()) as any;
+    expect(d.largest[0]).toMatchObject({
+      name: 'BIG STORE',
+      merchant: 'Big Store',
+      account_name: 'checking',
+      kind: 'spending',
+    });
+    expect(d.largest[0].classification_source).toBeTruthy();
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);

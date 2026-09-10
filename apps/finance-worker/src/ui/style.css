@@ -825,6 +825,11 @@ pre {
   border-color: var(--brand);
   color: var(--on-brand);
 }
+.chip svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
 
 /* -------------------------------------------------------------- charts */
 .chart {
@@ -860,6 +865,38 @@ pre {
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) 0;
+}
+.cat-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-2);
+  padding: var(--sp-2) var(--sp-3);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.cat-row:hover,
+.cat-row:focus-visible {
+  background: var(--surface-2);
+}
+.cat-drawer {
+  width: min(460px, 100%);
+}
+.cat-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--hairline);
+}
+.cat-tx {
+  border-radius: var(--r-2);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.cat-tx:hover {
+  background: var(--surface-2);
 }
 .bar-name {
   display: block;

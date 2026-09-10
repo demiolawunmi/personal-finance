@@ -603,6 +603,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
   const [selectedTx, setSelectedTx] = useState<Any>(null);
+  const [openCategory, setOpenCategory] = useState<Any>(null);
   const [command, setCommand] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [more, setMore] = useState(false);
@@ -756,6 +757,7 @@ export default function App() {
   const navigate = (next: string, filter?: { status?: string; fullYear?: boolean }) => {
     setView(next);
     setSelectedTx(null);
+    setOpenCategory(null);
     setCommand(false);
     setMore(false);
     setCursor(null);
@@ -1093,6 +1095,7 @@ export default function App() {
                   d={data}
                   nav={navigate}
                   onOpenTx={setSelectedTx}
+                  onOpenCategory={setOpenCategory}
                   onReviewed={async (id) => {
                     setData((d: Any) => ({
                       ...d,
@@ -1218,6 +1221,17 @@ export default function App() {
         />
       )}
       {more && <MoreSheet view={view} nav={navigate} close={() => setMore(false)} />}
+      {openCategory && (
+        <CategoryDrawer
+          category={openCategory.name}
+          spending={openCategory.spending}
+          start={start}
+          end={end}
+          currency={currency}
+          onClose={() => setOpenCategory(null)}
+          onOpenTx={setSelectedTx}
+        />
+      )}
       {selectedTx && (
         <TxDrawer
           tx={selectedTx}
@@ -1499,6 +1513,101 @@ function TxDrawer({
               </button>
             </div>
           </form>
+        </div>
+      </aside>
+    </>
+  );
+}
+function CategoryDrawer({
+  category,
+  spending,
+  start,
+  end,
+  currency,
+  onClose,
+  onOpenTx,
+}: {
+  category: string;
+  spending: Any;
+  start: string;
+  end: string;
+  currency: string;
+  onClose: () => void;
+  onOpenTx: (tx: Any) => void;
+}) {
+  const [rows, setRows] = useState<Any[] | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setRows(null);
+    setError('');
+    apiRetry(
+      `/api/transactions?currency=${currency}&start_date=${start}&end_date=${end}&category_id=${encodeURIComponent(category)}&limit=100`,
+    )
+      .then((r) => active && setRows(r.transactions ?? []))
+      .catch((e) => active && setError((e as Error).message));
+    return () => {
+      active = false;
+    };
+  }, [category, start, end, currency]);
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <aside
+        className="drawer cat-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cat-title"
+      >
+        <div className="drawer-head">
+          <div className="od-stack" style={gap('2px')}>
+            <span className="eyebrow">Category</span>
+            <h2 id="cat-title">{label(category)}</h2>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="cat-summary">
+          <span className="eyebrow">Spent this period</span>
+          <span className="row-amount tnum">{fmtMoney(spending)}</span>
+        </div>
+        <div className="drawer-body">
+          {!rows && !error && <p className="quiet">Loading transactions…</p>}
+          {error && <p className="quiet">{error}</p>}
+          {rows && !rows.length && (
+            <p className="quiet">No transactions in this category for the period.</p>
+          )}
+          {(rows ?? []).map((t: Any) => (
+            <button
+              key={t.id}
+              type="button"
+              className="row cat-tx"
+              onClick={() => onOpenTx(t)}
+              style={{ width: '100%', border: 0, background: 'transparent', textAlign: 'left' }}
+            >
+              <span className="od-fill">
+                <span className="row-title">{t.merchant}</span>
+                <span className="row-sub">
+                  {fmtDate(t.date)}
+                  {t.account_name ? ' · ' + t.account_name : ''}
+                </span>
+              </span>
+              <span
+                className={
+                  'row-amount tnum ' +
+                  (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                }
+              >
+                {fmtMoney(t.amount)}
+              </span>
+            </button>
+          ))}
+          {rows && rows.length > 0 && (
+            <p className="quiet" style={{ marginTop: 'var(--sp-4)' }}>
+              Open a transaction to verify or change its category.
+            </p>
+          )}
         </div>
       </aside>
     </>
@@ -2407,15 +2516,23 @@ function InsightsView({
   nav,
   onOpenTx,
   onReviewed,
+  onOpenCategory,
 }: {
   d: Any;
   nav: (v: string) => void;
   onOpenTx: (tx: Any) => void;
   onReviewed: (id: string) => void;
+  onOpenCategory: (c: Any) => void;
 }) {
   const max = Math.max(1, ...(d.categories ?? []).map((c: Any) => num(c.spending)));
   const catRows = (d.categories ?? []).map((c: Any) => (
-    <div className="bar-row" key={c.name}>
+    <button
+      type="button"
+      className="bar-row cat-row"
+      key={c.name}
+      onClick={() => onOpenCategory(c)}
+      title={`View ${label(c.name)} transactions`}
+    >
       <span className="bar-name">{label(c.name)}</span>
       <span className="bar-track">
         <span
@@ -2434,7 +2551,7 @@ function InsightsView({
           </span>
         )}
       </span>
-    </div>
+    </button>
   ));
   const top = (d.categories ?? []).slice(0, 6);
   const totalSpend = num(d.spending) || 1;
@@ -2546,7 +2663,10 @@ function InsightsView({
             <div className="donut-legend od-fill">{legend}</div>
           </div>
         </Card>
-        <Card title="Share and change">
+        <Card
+          title="Share and change"
+          extra={<span className="quiet">Select a category to inspect</span>}
+        >
           {catRows.length ? catRows : <p className="quiet">No settled spending for this period.</p>}
           <p className="quiet" style={{ marginTop: 'var(--sp-3)' }}>
             Change compares this month with the prior three-month median.
