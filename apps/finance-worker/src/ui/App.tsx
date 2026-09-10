@@ -2096,7 +2096,12 @@ function OverviewView({
                     {fmtDate(t.date)} · {categoryName(d, t.category_id)}
                   </span>
                 </span>
-                <span className={'row-amount tnum ' + (num(t.amount) > 0 ? 'pos' : '')}>
+                <span
+                  className={
+                    'row-amount tnum ' +
+                    (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                  }
+                >
                   {fmtMoney(t.amount)}
                 </span>
               </button>
@@ -2331,7 +2336,10 @@ function TransactionsView(props: {
                         {t.pending ? 'Pending' : label(t.kind)}
                       </span>
                     </td>
-                    <td className="num" data-label="Amount">
+                    <td
+                      className={'num ' + (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')}
+                      data-label="Amount"
+                    >
                       {fmtMoney(t.amount)}
                     </td>
                     <td className="cell-action">
