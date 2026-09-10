@@ -160,6 +160,28 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       return Response.json(
         await all(env.DB, 'SELECT id,display_name,type FROM categories ORDER BY display_name'),
       );
+    if (/^\/api\/transactions\/[^/]+$/.test(path)) {
+      const id = path.split('/')[3];
+      const row = await first<{
+        cashflow_amount_micros: number;
+        currency: string;
+        pending: number;
+        excluded: number;
+      }>(
+        env.DB,
+        `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
+           FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE t.id=?`,
+        id,
+      );
+      invariant(row, 404, 'TRANSACTION_NOT_FOUND');
+      const { cashflow_amount_micros, ...rest } = row;
+      return Response.json({
+        ...rest,
+        amount: money(cashflow_amount_micros, row.currency),
+        pending: !!row.pending,
+        excluded: !!row.excluded,
+      });
+    }
     if (path === '/api/budget')
       return Response.json({
         ...(await metrics.envelope(env.DB, p)),

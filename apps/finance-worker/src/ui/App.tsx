@@ -439,10 +439,11 @@ type Insight = {
   text: string;
   meta?: ReactNode;
   action?: { label: string; onClick: () => void };
+  onOpen?: () => void;
 };
-function InsightCard({ tone, icon, title, text, meta, action }: Insight) {
-  return (
-    <article className="insight">
+function InsightCard({ tone, icon, title, text, meta, action, onOpen }: Insight) {
+  const inner = (
+    <>
       <span className={'insight-icon ' + (tone || '')}>
         <Icon name={icon || 'info'} />
       </span>
@@ -451,7 +452,13 @@ function InsightCard({ tone, icon, title, text, meta, action }: Insight) {
         <span className="insight-text">{text}</span>
         {action && (
           <span style={{ marginTop: 6 }}>
-            <button className="btn btn-sm" onClick={action.onClick}>
+            <button
+              className="btn btn-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                action.onClick();
+              }}
+            >
               {action.label}
             </button>
           </span>
@@ -460,6 +467,23 @@ function InsightCard({ tone, icon, title, text, meta, action }: Insight) {
       <div className="od-fixed" style={{ textAlign: 'right' }}>
         {meta}
       </div>
+    </>
+  );
+  if (!onOpen) return <article className="insight">{inner}</article>;
+  return (
+    <article
+      className="insight insight-open"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {inner}
     </article>
   );
 }
@@ -604,6 +628,7 @@ export default function App() {
   const [version, setVersion] = useState(0);
   const [selectedTx, setSelectedTx] = useState<Any>(null);
   const [openCategory, setOpenCategory] = useState<Any>(null);
+  const [openSignal, setOpenSignal] = useState<Any>(null);
   const [command, setCommand] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [more, setMore] = useState(false);
@@ -758,6 +783,7 @@ export default function App() {
     setView(next);
     setSelectedTx(null);
     setOpenCategory(null);
+    setOpenSignal(null);
     setCommand(false);
     setMore(false);
     setCursor(null);
@@ -793,6 +819,18 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+  async function reviewSignal(id: string) {
+    setData((d: Any) =>
+      d
+        ? {
+            ...d,
+            anomalies: (d.anomalies ?? []).filter((a: Any) => a.id !== id),
+            signals: (d.signals ?? []).filter((s: Any) => s.id !== id),
+          }
+        : d,
+    );
+    await mutate('/api/anomalies/' + id + '/review', { status: 'reviewed' });
   }
   async function connect(id?: string) {
     setBusy(true);
@@ -1096,14 +1134,8 @@ export default function App() {
                   nav={navigate}
                   onOpenTx={setSelectedTx}
                   onOpenCategory={setOpenCategory}
-                  onReviewed={async (id) => {
-                    setData((d: Any) => ({
-                      ...d,
-                      anomalies: (d.anomalies ?? []).filter((a: Any) => a.id !== id),
-                      signals: (d.signals ?? []).filter((s: Any) => s.id !== id),
-                    }));
-                    await mutate('/api/anomalies/' + id + '/review', { status: 'reviewed' });
-                  }}
+                  onOpenSignal={setOpenSignal}
+                  onReviewed={reviewSignal}
                 />
               )}
               {!loading && view === 'recurring' && data && (
@@ -1221,6 +1253,18 @@ export default function App() {
         />
       )}
       {more && <MoreSheet view={view} nav={navigate} close={() => setMore(false)} />}
+      {openSignal && (
+        <SignalDrawer
+          signal={openSignal}
+          start={start}
+          end={end}
+          currency={currency}
+          onClose={() => setOpenSignal(null)}
+          onOpenTx={setSelectedTx}
+          onReviewed={reviewSignal}
+          nav={navigate}
+        />
+      )}
       {openCategory && (
         <CategoryDrawer
           category={openCategory.name}
@@ -1607,6 +1651,134 @@ function CategoryDrawer({
             <p className="quiet" style={{ marginTop: 'var(--sp-4)' }}>
               Open a transaction to verify or change its category.
             </p>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+function SignalDrawer({
+  signal,
+  start,
+  end,
+  currency,
+  onClose,
+  onOpenTx,
+  onReviewed,
+  nav,
+}: {
+  signal: Any;
+  start: string;
+  end: string;
+  currency: string;
+  onClose: () => void;
+  onOpenTx: (tx: Any) => void;
+  onReviewed: (id: string) => void;
+  nav: (v: string) => void;
+}) {
+  const isAnomaly = signal.type === 'anomaly';
+  const [tx, setTx] = useState<Any>(null);
+  const [rows, setRows] = useState<Any[] | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setTx(null);
+    setRows(null);
+    setError('');
+    if (signal.transaction_id) {
+      apiRetry(`/api/transactions/${signal.transaction_id}`)
+        .then((t) => active && setTx(t))
+        .catch((e) => active && setError((e as Error).message));
+    } else if (signal.merchant) {
+      apiRetry(
+        `/api/transactions?currency=${currency}&start_date=${start}&end_date=${end}&query=${encodeURIComponent(signal.merchant)}&limit=100`,
+      )
+        .then((r) => active && setRows(r.transactions ?? []))
+        .catch((e) => active && setError((e as Error).message));
+    }
+    return () => {
+      active = false;
+    };
+  }, [signal, start, end, currency]);
+  const list = tx ? [tx] : (rows ?? []);
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <aside
+        className="drawer cat-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sig-title"
+      >
+        <div className="drawer-head">
+          <div className="od-stack" style={gap('2px')}>
+            <span className="eyebrow">{isAnomaly ? 'Anomaly' : 'Recurring price change'}</span>
+            <h2 id="sig-title">{isAnomaly ? label(signal.kind) : signal.merchant}</h2>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="cat-summary">
+          <span className="eyebrow">{fmtDate(signal.date)}</span>
+          <span className="row-amount tnum">{fmtMoney(signal.amount)}</span>
+        </div>
+        <div className="drawer-body">
+          <p className="quiet" style={{ marginTop: 0 }}>
+            {signal.detail}
+          </p>
+          {!tx && !rows && !error && <p className="quiet">Loading related transactions…</p>}
+          {error && <p className="quiet">{error}</p>}
+          {rows && !rows.length && (
+            <p className="quiet">No transactions found for this merchant in the period.</p>
+          )}
+          {list.map((t: Any) => (
+            <button
+              key={t.id}
+              type="button"
+              className="row cat-tx"
+              onClick={() => onOpenTx(t)}
+              style={{ width: '100%', border: 0, background: 'transparent', textAlign: 'left' }}
+            >
+              <span className="od-fill">
+                <span className="row-title">{t.merchant}</span>
+                <span className="row-sub">
+                  {fmtDate(t.date)}
+                  {t.account_name ? ' · ' + t.account_name : ''}
+                </span>
+              </span>
+              <span
+                className={
+                  'row-amount tnum ' +
+                  (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                }
+              >
+                {fmtMoney(t.amount)}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="drawer-foot">
+          {isAnomaly ? (
+            <button
+              className="btn"
+              onClick={() => {
+                onReviewed(signal.id);
+                onClose();
+              }}
+            >
+              Mark reviewed
+            </button>
+          ) : (
+            <button
+              className="btn"
+              onClick={() => {
+                onClose();
+                nav('recurring');
+              }}
+            >
+              Open recurring
+            </button>
           )}
         </div>
       </aside>
@@ -2517,12 +2689,14 @@ function InsightsView({
   onOpenTx,
   onReviewed,
   onOpenCategory,
+  onOpenSignal,
 }: {
   d: Any;
   nav: (v: string) => void;
   onOpenTx: (tx: Any) => void;
   onReviewed: (id: string) => void;
   onOpenCategory: (c: Any) => void;
+  onOpenSignal: (s: Any) => void;
 }) {
   const max = Math.max(1, ...(d.categories ?? []).map((c: Any) => num(c.spending)));
   const catRows = (d.categories ?? []).map((c: Any) => (
@@ -2608,6 +2782,7 @@ function InsightsView({
         icon={signalIcon(s.kind)}
         title={isAnomaly ? label(s.kind) : s.title + ' price increased'}
         text={s.detail}
+        onOpen={() => onOpenSignal(s)}
         meta={
           <>
             <span className="row-amount">{fmtMoney(s.amount)}</span>

@@ -1037,6 +1037,14 @@ pre {
   border-radius: var(--r-3);
   background: var(--surface);
 }
+.insight-open {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.insight-open:hover,
+.insight-open:focus-visible {
+  background: var(--surface-2);
+}
 .insight-icon {
   display: grid;
   place-items: center;

@@ -362,6 +362,33 @@ it('returns full details for largest transactions so the drawer can render', asy
     close();
   }
 });
+it('returns a single transaction by id for the signal drawer', async () => {
+  const { db, env, request, close } = await setup();
+  try {
+    await insert(
+      db,
+      'transactions',
+      tx('one', -1000000, { date: '2026-09-01', name: 'SHOP', merchant_name: 'Shop' }),
+    ).run();
+    await rebuild(db);
+    const row = (await (
+      await dashboardApi(request('/api/transactions/one', 'GET'), env)
+    ).json()) as any;
+    expect(row).toMatchObject({
+      id: 'one',
+      merchant: 'Shop',
+      name: 'SHOP',
+      account_name: 'checking',
+      kind: 'spending',
+    });
+    expect(row.amount).toEqual({ amount: '-1.000000', currency: 'CAD' });
+    await expect(
+      dashboardApi(request('/api/transactions/missing', 'GET'), env),
+    ).rejects.toThrow('TRANSACTION_NOT_FOUND');
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);
