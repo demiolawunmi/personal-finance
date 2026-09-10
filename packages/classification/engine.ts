@@ -71,7 +71,7 @@ export function classify(
         : 'provider';
     const type = cats.get(category_id) ?? 'spending';
     const refundSignal =
-      /refund|reversal|return\b|reimburse|reimbursement|\bclaims?\b/i.test(
+      /refund|reversal|return\b|reimburse|reimbursement|\bclaims?\b|correction/i.test(
         t.name + ' ' + (t.original_description ?? ''),
       ) || /REFUND/.test(t.plaid_detailed_category ?? '');
     const kind: Fact['kind'] =

@@ -137,6 +137,61 @@ describe('classification', () => {
     ]);
     expect(r.facts[0].kind).toBe('refund');
   });
+  it('normalizes the PRES/ transit descriptor to PRESTO and reconciles corrections', () => {
+    const r = classify(
+      [
+        tx('fare', -3250000, {
+          date: '2026-09-01',
+          merchant_name: null,
+          name: 'POS Purchase APOS PRES/SJ757XGRG6',
+        }),
+        tx('corr', 3250000, {
+          date: '2026-09-02',
+          merchant_name: null,
+          name: 'Correction APOS PRES/SJ757XGRG6',
+        }),
+      ],
+      [],
+      [
+        {
+          id: 'presto',
+          field: 'merchant',
+          operator: 'equals',
+          pattern: 'PRESTO',
+          category_id: 'transportation',
+          priority: 20,
+          version: 1,
+          active: 1,
+          updated_at: 'x',
+        },
+      ] as any,
+      [
+        { id: 'transportation', type: 'spending' },
+        { id: 'shopping', type: 'spending' },
+      ] as any,
+      [
+        {
+          id: 'alias',
+          raw_pattern: 'PRES/',
+          canonical_merchant: 'PRESTO',
+          confidence: 0.99,
+          source: 'manual',
+          created_at: 'x',
+        },
+      ] as any,
+    );
+    expect(r.facts[0]).toMatchObject({
+      merchant: 'PRESTO',
+      category_id: 'transportation',
+      kind: 'spending',
+    });
+    expect(r.facts[1]).toMatchObject({
+      merchant: 'PRESTO',
+      category_id: 'transportation',
+      kind: 'refund',
+      refund_of: 'fare',
+    });
+  });
 });
 describe('financial summaries', () => {
   it('reconciles income, net refunds, transfers, pending and currencies', () => {
