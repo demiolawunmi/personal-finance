@@ -1814,8 +1814,8 @@ function CashflowChart({ d }: { d: Any }) {
               className="cf-bars"
               title={`${name}: in ${fmtCompact(m.income)}, out ${fmtCompact(m.spending)}`}
             >
-              <span className="cf-bar" style={{ height: ih.toFixed(0) }} />
-              <span className="cf-bar spend" style={{ height: sh.toFixed(0) }} />
+              <span className="cf-bar" style={{ height: `${ih.toFixed(0)}px` }} />
+              <span className="cf-bar spend" style={{ height: `${sh.toFixed(0)}px` }} />
             </div>
             <span className="cf-label">{name}</span>
             <span className={'cf-net ' + (m.net >= 0 ? 'pos' : 'neg')}>{fmtCompact(m.net)}</span>
