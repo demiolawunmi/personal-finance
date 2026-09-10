@@ -71,8 +71,9 @@ export function classify(
         : 'provider';
     const type = cats.get(category_id) ?? 'spending';
     const refundSignal =
-      /refund|reversal|return\b/i.test(t.name + ' ' + (t.original_description ?? '')) ||
-      /REFUND/.test(t.plaid_detailed_category ?? '');
+      /refund|reversal|return\b|reimburse|reimbursement|\bclaims?\b/i.test(
+        t.name + ' ' + (t.original_description ?? ''),
+      ) || /REFUND/.test(t.plaid_detailed_category ?? '');
     const kind: Fact['kind'] =
       type === 'transfer'
         ? 'transfer'
@@ -185,6 +186,38 @@ export function classify(
     if (matches.length) {
       const original = matches[0];
       f.kind = 'refund';
+      f.refund_of = original.id;
+      if (!ann.get(t.id)?.category_override_id && !f.classification_source.startsWith('rule:'))
+        f.category_id = byId.get(original.id)!.category_id;
+      refunded.set(original.id, (refunded.get(original.id) ?? 0) + t.cashflow_amount_micros);
+    }
+  }
+  // A reimbursement claim usually arrives from the insurer or benefits
+  // administrator rather than the original provider, so it cannot match on
+  // merchant. Link it to the most recent prior spending in a reimbursable
+  // category that can still cover the amount.
+  const reimbursable = new Set(['health', 'insurance']);
+  const claimText = /reimburse|reimbursement|\bclaims?\b/i;
+  for (const t of eligible.filter((t) => t.cashflow_amount_micros > 0)) {
+    const f = byId.get(t.id)!;
+    if (f.kind !== 'refund' || f.refund_of) continue;
+    if (!claimText.test(t.name + ' ' + (t.original_description ?? ''))) continue;
+    const matches = eligible
+      .filter((o) => {
+        const of = byId.get(o.id)!;
+        const elapsed = dayDiff(o.date, t.date);
+        return (
+          of.kind === 'spending' &&
+          reimbursable.has(of.category_id) &&
+          o.currency === t.currency &&
+          elapsed >= 0 &&
+          elapsed <= 120 &&
+          -o.cashflow_amount_micros - (refunded.get(o.id) ?? 0) >= t.cashflow_amount_micros
+        );
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+    if (matches.length) {
+      const original = matches[0];
       f.refund_of = original.id;
       if (!ann.get(t.id)?.category_override_id && !f.classification_source.startsWith('rule:'))
         f.category_id = byId.get(original.id)!.category_id;

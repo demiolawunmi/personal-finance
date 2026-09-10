@@ -106,6 +106,37 @@ describe('classification', () => {
     expect(r.facts[1].refund_of).toBe('p');
     expect(r.facts[2].refund_of).toBeNull();
   });
+  it('links an insurance claim to prior health spending from a different merchant', () => {
+    const r = classifyRows([
+      tx('dentist', -20000000, {
+        date: '2026-08-20',
+        merchant_name: 'Downtown Dental',
+        name: 'DENTAL SERVICES',
+        plaid_primary_category: 'MEDICAL',
+        plaid_detailed_category: 'MEDICAL_DENTAL',
+      }),
+      tx('claim', 11360000, {
+        date: '2026-09-04',
+        merchant_name: 'People Corporation',
+        name: 'Health/Dentl Claim Ins PEOPLE CORPORATION',
+        plaid_primary_category: 'INSURANCE',
+        plaid_detailed_category: 'INSURANCE',
+      }),
+    ]);
+    expect(r.facts[1]).toMatchObject({ kind: 'refund', refund_of: 'dentist', category_id: 'health' });
+  });
+  it('treats a claim inflow as a refund even without a matching purchase', () => {
+    const r = classifyRows([
+      tx('claim', 11360000, {
+        date: '2026-09-04',
+        merchant_name: 'People Corporation',
+        name: 'Health/Dentl Claim Ins PEOPLE CORPORATION',
+        plaid_primary_category: 'INSURANCE',
+        plaid_detailed_category: 'INSURANCE',
+      }),
+    ]);
+    expect(r.facts[0].kind).toBe('refund');
+  });
 });
 describe('financial summaries', () => {
   it('reconciles income, net refunds, transfers, pending and currencies', () => {
