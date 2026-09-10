@@ -3040,11 +3040,16 @@ function AccountsView({
         {conns.length ? (
           <>
             {conns}
-            {demo && (
+            {demo ? (
               <p className="quiet">
                 Bank connections are disabled in the synthetic preview. Open the Worker locally to
                 use Plaid.
               </p>
+            ) : (
+              <button className="btn btn-primary" disabled={busy} onClick={() => connect()}>
+                <Icon name="link" />
+                Add another institution
+              </button>
             )}
           </>
         ) : (
@@ -3580,9 +3585,9 @@ function SetupPanel({
           <button className="btn" onClick={refresh} disabled={busy}>
             Refresh checks
           </button>
-          {!demo && !connectionReady && plaidReady && (
+          {!demo && plaidReady && (
             <button className="btn btn-primary" onClick={connect} disabled={busy}>
-              Connect institution
+              {connectionReady ? 'Add another institution' : 'Connect institution'}
             </button>
           )}
         </div>
