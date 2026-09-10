@@ -476,7 +476,17 @@ const friendlyError = (code: string) =>
     INSTITUTION_NOT_SUPPORTED:
       'This institution is not available in the configured Plaid environment.',
     PLAID_UNAVAILABLE: 'Plaid is temporarily unavailable. Try again in a moment.',
+    DERIVED_DATA_REBUILDING:
+      'Your latest data is still being recalculated. This clears in a moment — retrying.',
+    DATABASE_UNINITIALIZED: 'The database is not initialized yet. Run the D1 migrations.',
   })[code] ?? code;
+class ApiError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
 async function api(path: string, csrf = '', body?: unknown, method = 'GET'): Promise<any> {
   const response = await fetch(path, {
     method,
@@ -488,15 +498,31 @@ async function api(path: string, csrf = '', body?: unknown, method = 'GET'): Pro
   });
   if (!response.ok) {
     const e = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(
+    const code = e.error ?? 'REQUEST_FAILED';
+    throw new ApiError(
+      code,
       response.status === 401
         ? 'Sign in to access your finances.'
-        : e.error === 'SERVICE_UNAVAILABLE'
+        : code === 'SERVICE_UNAVAILABLE'
           ? 'Data is temporarily unavailable. A sync or rebuild may be running. Try again shortly.'
-          : friendlyError(e.error ?? 'Request failed.'),
+          : friendlyError(code),
     );
   }
   return response.json();
+}
+// Reads can fail briefly while a queued rebuild publishes derived tables.
+async function apiRetry(path: string, attempts = 8): Promise<any> {
+  for (let i = 0; ; i++) {
+    try {
+      return await api(path);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'DERIVED_DATA_REBUILDING' && i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 700 + i * 500));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 /* ------------------------------------------------------- nav + meta */
@@ -649,8 +675,8 @@ export default function App() {
     }
     const needsBalances = view === 'transactions' || view === 'accounts';
     Promise.all([
-      api('/api/' + ENDPOINTS[view] + '?' + params),
-      needsBalances ? api('/api/balances?' + params) : Promise.resolve(null),
+      apiRetry('/api/' + ENDPOINTS[view] + '?' + params),
+      needsBalances ? apiRetry('/api/balances?' + params) : Promise.resolve(null),
     ])
       .then(([primary, balances]) => {
         if (!active) return;
