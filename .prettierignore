@@ -1,0 +1,8 @@
+node_modules
+.pnpm-store
+.wrangler
+apps/finance-worker/.wrangler
+apps/finance-worker/dist
+apps/finance-worker/worker-configuration.d.ts
+pnpm-lock.yaml
+docs/architecture.md

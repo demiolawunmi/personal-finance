@@ -1,0 +1,37 @@
+[
+  {
+    "prompt": "Why did I spend so much this month?",
+    "expected_tools": ["get_spending_summary", "compare_periods", "get_category_breakdown"],
+    "checks": ["bounded current month", "same currency", "mention incomplete coverage"]
+  },
+  {
+    "prompt": "Did I spend more eating out than last month?",
+    "expected_tools": ["get_category_breakdown", "compare_periods"],
+    "checks": ["compare equivalent periods", "do not mix currencies"]
+  },
+  {
+    "prompt": "What's costing me the most repeatedly?",
+    "expected_tools": ["get_recurring_expenses"],
+    "checks": ["distinguish estimated monthly equivalents from actual charges"]
+  },
+  {
+    "prompt": "Can I see all Uber transactions from August?",
+    "expected_tools": ["search_transactions"],
+    "checks": ["merchant filter", "August dates", "pagination maximum 100"]
+  },
+  {
+    "prompt": "How much did I actually save last month?",
+    "expected_tools": ["get_cashflow"],
+    "checks": ["income minus consumption is not account balance growth"]
+  },
+  {
+    "prompt": "Why is my credit card higher?",
+    "expected_tools": ["get_net_worth", "search_transactions"],
+    "checks": ["credit payments are transfers", "pending separate"]
+  },
+  {
+    "prompt": "Is my bank data current?",
+    "expected_tools": ["get_data_health"],
+    "checks": ["state institution-level timestamps"]
+  }
+]

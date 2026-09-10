@@ -1,0 +1,11 @@
+# Copy to .dev.vars in THIS directory. Never commit actual values.
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+OWNER_GITHUB_ID=
+PLAID_CLIENT_ID=
+PLAID_SECRET=
+# openssl rand -base64 32; each key must be independently generated
+TOKEN_ENCRYPTION_KEY=
+COOKIE_ENCRYPTION_KEY=
+# Optional JSON map of previous key versions to base64 keys for rotation
+TOKEN_PREVIOUS_KEYS={}

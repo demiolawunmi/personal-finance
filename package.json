@@ -1,0 +1,52 @@
+{
+  "name": "personal-finance",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm build:ui && wrangler dev -c apps/finance-worker/wrangler.jsonc",
+    "build:ui": "vite build --config apps/finance-worker/vite.config.ts",
+    "build": "pnpm build:ui && wrangler deploy --dry-run -c apps/finance-worker/wrangler.jsonc --env=\"\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "db:migrate": "wrangler d1 migrations apply finance-local --local -c apps/finance-worker/wrangler.jsonc",
+    "db:migrate:sandbox": "wrangler d1 migrations apply finance-sandbox --remote -c apps/finance-worker/wrangler.jsonc --env sandbox",
+    "db:migrate:production": "wrangler d1 migrations apply finance-production --remote -c apps/finance-worker/wrangler.jsonc --env production",
+    "db:seed": "tsx scripts/seed-sandbox.ts",
+    "integrity": "tsx scripts/integrity-check.ts",
+    "types": "wrangler types -c apps/finance-worker/wrangler.jsonc apps/finance-worker/worker-configuration.d.ts",
+    "deploy:sandbox": "pnpm check && pnpm db:migrate:sandbox && wrangler deploy -c apps/finance-worker/wrangler.jsonc --env sandbox",
+    "test:plaid": "vitest run tests/plaid-sandbox",
+    "backfill": "tsx scripts/backfill.ts",
+    "rotate:tokens": "tsx scripts/rotate-tokens.ts",
+    "test:worker": "tsx scripts/smoke-worker.ts",
+    "demo": "tsx scripts/demo.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.10.3",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.22.0",
+    "jose": "^6.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260907.1",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.129.1"
+  }
+}

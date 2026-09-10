@@ -1,0 +1,100 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "personal-finance-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": {
+    "APP_ENV": "local",
+    "APP_ORIGIN": "http://localhost:8787",
+    "PLAID_ENV": "sandbox",
+    "TIMEZONE": "America/Toronto",
+    "TOKEN_KEY_VERSION": "1",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "finance-local",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../../migrations",
+    },
+  ],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000001" }],
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "finance-local" }],
+    "consumers": [
+      {
+        "queue": "finance-local",
+        "max_batch_size": 1,
+        "max_retries": 5,
+        "dead_letter_queue": "finance-local-dlq",
+      },
+    ],
+  },
+  "triggers": { "crons": ["0 10 * * *"] },
+  "env": {
+    "sandbox": {
+      "name": "personal-finance-sandbox",
+      "vars": {
+        "APP_ENV": "sandbox",
+        "APP_ORIGIN": "https://REPLACE-SANDBOX.workers.dev",
+        "PLAID_ENV": "sandbox",
+        "TIMEZONE": "America/Toronto",
+        "TOKEN_KEY_VERSION": "1",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "finance-sandbox",
+          "database_id": "REPLACE_WITH_SANDBOX_D1_ID",
+          "migrations_dir": "../../migrations",
+        },
+      ],
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_SANDBOX_KV_ID" }],
+      "queues": {
+        "producers": [{ "binding": "JOBS", "queue": "finance-sandbox" }],
+        "consumers": [
+          {
+            "queue": "finance-sandbox",
+            "max_batch_size": 1,
+            "max_retries": 5,
+            "dead_letter_queue": "finance-sandbox-dlq",
+          },
+        ],
+      },
+    },
+    "production": {
+      "name": "personal-finance",
+      "workers_dev": true,
+      "vars": {
+        "APP_ENV": "production",
+        "APP_ORIGIN": "https://REPLACE-PRODUCTION.workers.dev",
+        "PLAID_ENV": "production",
+        "TIMEZONE": "America/Toronto",
+        "TOKEN_KEY_VERSION": "1",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "finance-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "../../migrations",
+        },
+      ],
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_PRODUCTION_KV_ID" }],
+      "queues": {
+        "producers": [{ "binding": "JOBS", "queue": "finance-production" }],
+        "consumers": [
+          {
+            "queue": "finance-production",
+            "max_batch_size": 1,
+            "max_retries": 5,
+            "dead_letter_queue": "finance-production-dlq",
+          },
+        ],
+      },
+    },
+  },
+}

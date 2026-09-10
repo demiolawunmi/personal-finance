@@ -1,0 +1,49 @@
+export type Transaction = {
+  id: string;
+  plaid_transaction_id: string;
+  account_id: string;
+  plaid_amount_micros: number;
+  cashflow_amount_micros: number;
+  currency: string;
+  date: string;
+  authorized_date: string | null;
+  name: string;
+  merchant_name: string | null;
+  original_description: string | null;
+  plaid_primary_category: string | null;
+  plaid_detailed_category: string | null;
+  pending: number;
+  pending_transaction_id: string | null;
+  payment_channel: string | null;
+  is_removed: number;
+  created_at: string;
+  updated_at: string;
+};
+export type Annotation = {
+  transaction_id: string;
+  merchant_override: string | null;
+  category_override_id: string | null;
+  exclude_from_spending: number;
+  note?: string | null;
+};
+export type Category = { id: string; type: 'spending' | 'income' | 'transfer' };
+export type Rule = {
+  id: string;
+  field: 'merchant' | 'description';
+  operator: 'equals' | 'contains';
+  pattern: string;
+  category_id: string;
+  priority: number;
+  version: number;
+};
+export type Alias = { raw_pattern: string; canonical_merchant: string };
+export type Fact = {
+  transaction_id: string;
+  category_id: string;
+  merchant: string;
+  kind: 'spending' | 'income' | 'transfer' | 'refund' | 'unclassified_inflow';
+  classification_source: string;
+  refund_of: string | null;
+};
+export type EffectiveTransaction = Transaction & Fact & { excluded: number; note: string | null };
+export const CALCULATION_VERSION = '1.0.0';
