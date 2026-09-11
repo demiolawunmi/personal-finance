@@ -63,6 +63,8 @@ export const transactionSchema = z.object({
   unofficial_currency_code: z.string().nullable().optional(),
   date: z.string(),
   authorized_date: z.string().nullable().optional(),
+  datetime: z.string().nullable().optional(),
+  authorized_datetime: z.string().nullable().optional(),
   name: z.string(),
   merchant_name: z.string().nullable().optional(),
   original_description: z.string().nullable().optional(),

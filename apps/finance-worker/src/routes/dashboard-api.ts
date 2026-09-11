@@ -167,9 +167,11 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         currency: string;
         pending: number;
         excluded: number;
+        datetime: string | null;
+        authorized_datetime: string | null;
       }>(
         env.DB,
-        `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
+        `SELECT t.id,t.date,t.datetime,t.authorized_datetime,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
            FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE t.id=?`,
         id,
       );

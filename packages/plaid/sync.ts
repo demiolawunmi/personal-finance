@@ -94,6 +94,8 @@ export function normalize(
     currency: t.iso_currency_code ?? t.unofficial_currency_code ?? 'UNKNOWN',
     date: t.date,
     authorized_date: t.authorized_date ?? null,
+    datetime: t.datetime ?? null,
+    authorized_datetime: t.authorized_datetime ?? null,
     name: t.name,
     merchant_name: t.merchant_name ?? null,
     original_description: t.original_description ?? null,

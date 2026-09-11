@@ -9,6 +9,8 @@ export function tx(id: string, amount: number, overrides: Partial<Transaction> =
     currency: 'CAD',
     date: '2026-09-08',
     authorized_date: null,
+    datetime: null,
+    authorized_datetime: null,
     name: 'Shop',
     merchant_name: 'Shop',
     original_description: null,

@@ -348,14 +348,19 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
   }
   if (s.cursor) {
     const parts = s.cursor.split('|');
-    if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}$/.test(parts[0]))
+    if (parts.length !== 3 || !/^\d{4}-\d{2}-\d{2}$/.test(parts[0]))
       throw new Error('INVALID_CURSOR');
-    clauses.push('(t.date<? OR (t.date=? AND t.id<?))');
-    params.push(parts[0], parts[0], parts[1]);
+    const [cursorDate, cursorTime, cursorId] = parts;
+    clauses.push(
+      "(t.date<? OR (t.date=? AND COALESCE(t.datetime,'')<?) OR (t.date=? AND COALESCE(t.datetime,'')=? AND t.id<?))",
+    );
+    params.push(cursorDate, cursorDate, cursorTime, cursorDate, cursorTime, cursorId);
   }
   const rows = await all<{
     id: string;
     date: string;
+    datetime: string | null;
+    authorized_datetime: string | null;
     merchant: string;
     name: string;
     cashflow_amount_micros: number;
@@ -369,7 +374,7 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
     classification_source: string;
   }>(
     db,
-    `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE ${clauses.join(' AND ')} ORDER BY t.date DESC,t.id DESC LIMIT ?`,
+    `SELECT t.id,t.date,t.datetime,t.authorized_datetime,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id WHERE ${clauses.join(' AND ')} ORDER BY t.date DESC,COALESCE(t.datetime,'') DESC,t.id DESC LIMIT ?`,
     ...params,
     limit + 1,
   );
@@ -382,7 +387,7 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
       pending: !!t.pending,
       excluded: !!t.excluded,
     })),
-    next_cursor: rows.length > limit && last ? `${last.date}|${last.id}` : null,
+    next_cursor: rows.length > limit && last ? `${last.date}|${last.datetime ?? ''}|${last.id}` : null,
   };
 }
 export async function balances(db: Database, currency: string, asOf = new Date().toISOString()) {
@@ -743,6 +748,8 @@ export async function largestTransactions(db: Database, p: Period) {
   const rows = await all<{
     id: string;
     date: string;
+    datetime: string | null;
+    authorized_datetime: string | null;
     merchant: string;
     name: string;
     cashflow_amount_micros: number;
@@ -756,7 +763,7 @@ export async function largestTransactions(db: Database, p: Period) {
     classification_source: string;
   }>(
     db,
-    `SELECT t.id,t.date,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
+    `SELECT t.id,t.date,t.datetime,t.authorized_datetime,t.merchant,t.name,t.cashflow_amount_micros,t.currency,t.account_id,COALESCE(a.custom_name,a.name) account_name,t.category_id,t.kind,t.pending,t.excluded,t.classification_source
        FROM effective_transactions t LEFT JOIN accounts a ON a.id=t.account_id
       WHERE t.date BETWEEN ? AND ? AND t.currency=? AND t.pending=0 AND t.excluded=0 AND t.kind='spending'
       ORDER BY t.cashflow_amount_micros LIMIT 10`,

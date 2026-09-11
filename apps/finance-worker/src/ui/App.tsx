@@ -66,6 +66,10 @@ function fmtDateTime(iso: string | null | undefined): string {
     d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
   );
 }
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
+}
 function relTime(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const diff = Date.now() - Date.parse(iso);
@@ -1448,7 +1452,10 @@ function TxDrawer({
       <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="tx-title">
         <div className="drawer-head">
           <div className="od-stack" style={gap('2px')}>
-            <span className="eyebrow">{fmtDateLong(t.date)}</span>
+            <span className="eyebrow">
+              {fmtDateLong(t.date)}
+              {t.datetime ? ' · ' + fmtTime(t.datetime) : ''}
+            </span>
             <h2 id="tx-title">{t.merchant}</h2>
             <span className="quiet">{t.account_name || t.account_id}</span>
           </div>
@@ -2600,6 +2607,11 @@ function TransactionsView(props: {
                   <tr key={t.id} onClick={() => onOpenTx(t)} tabIndex={0}>
                     <td className="date-cell" data-label="Date">
                       {fmtDate(t.date)}
+                      {t.datetime && (
+                        <span className="row-sub" style={{ display: 'block' }}>
+                          {fmtTime(t.datetime)}
+                        </span>
+                      )}
                     </td>
                     <td data-label="Merchant">
                       <span className="cell-merchant">

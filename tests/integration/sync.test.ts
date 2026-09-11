@@ -123,6 +123,40 @@ it('synchronizes additions, modifications, removals and pending annotation carry
     close();
   }
 });
+it('stores the transaction time-of-day when the institution provides it', async () => {
+  const { db, close } = database();
+  try {
+    await seedAccounts(db);
+    const keys = { TOKEN_ENCRYPTION_KEY: btoa('k'.repeat(32)), TOKEN_KEY_VERSION: '1' };
+    const e = await encrypt('access-test', keys.TOKEN_ENCRYPTION_KEY, 'plaid:item:1');
+    await db
+      .prepare(
+        'UPDATE plaid_items SET access_token_ciphertext=?,access_token_iv=?,key_version=? WHERE id=?',
+      )
+      .bind(e.ciphertext, e.iv, '1', 'item')
+      .run();
+    const timed = {
+      ...transaction,
+      transaction_id: 'timed',
+      pending: false,
+      datetime: '2026-09-08T18:42:00Z',
+      authorized_datetime: '2026-09-08T18:40:00Z',
+    };
+    const client = {
+      call: async (path: string) =>
+        path === '/accounts/get' ? { accounts: [account] } : page({ added: [timed] }),
+    } as unknown as PlaidClient;
+    await syncItem(db, client, keys, 'item');
+    const row = await first<any>(
+      db,
+      "SELECT datetime,authorized_datetime FROM transactions WHERE plaid_transaction_id='timed'",
+    );
+    expect(row.datetime).toBe('2026-09-08T18:42:00Z');
+    expect(row.authorized_datetime).toBe('2026-09-08T18:40:00Z');
+  } finally {
+    close();
+  }
+});
 it('does not advance the cursor when a later page fails', async () => {
   const { db, close } = database();
   try {

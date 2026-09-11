@@ -7,6 +7,8 @@ export type Transaction = {
   currency: string;
   date: string;
   authorized_date: string | null;
+  datetime: string | null;
+  authorized_datetime: string | null;
   name: string;
   merchant_name: string | null;
   original_description: string | null;
