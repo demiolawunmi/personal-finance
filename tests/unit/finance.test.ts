@@ -192,6 +192,53 @@ describe('classification', () => {
       refund_of: 'fare',
     });
   });
+  it('separates Uber Eats from Uber trips and does not confuse taxis with taxes', () => {
+    const r = classify(
+      [
+        tx('trip', -2000000, {
+          name: 'POS Purchase OPOS UBER CANADA/UBERTRIPTORON',
+          merchant_name: 'Uber',
+          plaid_primary_category: 'TRANSPORTATION',
+          plaid_detailed_category: 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES',
+        }),
+        tx('eats', -3000000, {
+          name: 'POS Purchase OPOS UBER CANADA/UBEREATSTORON',
+          merchant_name: 'Uber',
+          plaid_primary_category: 'TRANSPORTATION',
+          plaid_detailed_category: 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES',
+        }),
+        tx('fuel', -4000000, {
+          name: 'POS Purchase GAS STATION',
+          plaid_primary_category: 'TRANSPORTATION',
+          plaid_detailed_category: 'TRANSPORTATION_GAS_STATIONS',
+        }),
+      ],
+      [],
+      [
+        {
+          id: 'uber-eats-dining',
+          field: 'merchant',
+          operator: 'equals',
+          pattern: 'Uber Eats',
+          category_id: 'dining',
+          priority: 15,
+          version: 1,
+          active: 1,
+          updated_at: 'x',
+        },
+      ] as any,
+      [
+        { id: 'transportation', type: 'spending' },
+        { id: 'dining', type: 'spending' },
+        { id: 'taxes', type: 'spending' },
+        { id: 'utilities', type: 'spending' },
+      ] as any,
+    );
+    const by = Object.fromEntries(r.facts.map((f) => [f.transaction_id, f]));
+    expect(by.trip).toMatchObject({ merchant: 'Uber', category_id: 'transportation' });
+    expect(by.eats).toMatchObject({ merchant: 'Uber Eats', category_id: 'dining' });
+    expect(by.fuel).toMatchObject({ category_id: 'transportation' });
+  });
 });
 describe('financial summaries', () => {
   it('reconciles income, net refunds, transfers, pending and currencies', () => {

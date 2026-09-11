@@ -4,7 +4,12 @@ export function normalizeMerchant(t: Transaction, aliases: Alias[] = []) {
   const raw = (t.merchant_name || t.name).trim();
   const alias = aliases.find((a) => raw.toLowerCase().includes(a.raw_pattern.toLowerCase()));
   if (alias) return alias.canonical_merchant;
-  if (/uber\s*\*?\s*eats|ubereats/i.test(raw)) return 'Uber Eats';
+  // Plaid reports both Uber Eats and Uber rides as merchant "Uber"; the raw
+  // descriptor ("...UBEREATSTORON" vs "...UBERTRIPTORON") is the only signal.
+  const descriptor = [t.merchant_name, t.name, t.original_description]
+    .filter(Boolean)
+    .join(' ');
+  if (/uber\s*\*?\s*eats|ubereats/i.test(descriptor)) return 'Uber Eats';
   return raw
     .replace(/\s+\d{2}\/\d{2}$/, '')
     .replace(/\s+/g, ' ')
@@ -28,11 +33,11 @@ const primary: Record<string, string> = {
 function providerCategory(t: Transaction) {
   const d = t.plaid_detailed_category ?? '';
   if (/GROCERIES/.test(d)) return 'groceries';
-  if (/ELECTRICITY|GAS|WATER|INTERNET|TELEPHONE|UTILITIES/.test(d)) return 'utilities';
+  if (/UTILITIES|ELECTRICITY|INTERNET|TELEPHONE|WATER|NATURAL_GAS/.test(d)) return 'utilities';
   if (/EDUCATION/.test(d)) return 'education';
   if (/INSURANCE/.test(d)) return 'insurance';
   if (/DONATIONS/.test(d)) return 'charity';
-  if (/TAX/.test(d)) return 'taxes';
+  if (/TAX_PAYMENT|TAXES/.test(d)) return 'taxes';
   if (/INVESTMENT|BROKERAGE/.test(d) && /TRANSFER/.test(t.plaid_primary_category ?? ''))
     return 'investments';
   // Generic external transfers are ambiguous; only specific money-movement evidence excludes them.
