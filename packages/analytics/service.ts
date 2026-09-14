@@ -400,10 +400,11 @@ export async function balances(db: Database, currency: string, asOf = new Date()
     available_amount_micros: number | null;
     observed_at: string | null;
     institution_name: string | null;
-    logo: string | null;
+    has_logo: number;
+    item_id: string;
   }>(
     db,
-    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.is_active,i.institution_name,i.logo,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? AND a.hidden=0`,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.is_active,i.institution_name,i.logo IS NOT NULL AS has_logo,a.plaid_item_id AS item_id,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? AND a.hidden=0`,
     currency,
     asOf,
     currency,
@@ -439,7 +440,8 @@ export async function balances(db: Database, currency: string, asOf = new Date()
       type: r.type,
       active: !!r.is_active,
       institution_name: r.institution_name,
-      logo: r.logo,
+      has_logo: !!r.has_logo,
+      item_id: r.item_id,
       current: r.current_amount_micros === null ? null : money(r.current_amount_micros, currency),
       available:
         r.available_amount_micros === null ? null : money(r.available_amount_micros, currency),
@@ -457,13 +459,14 @@ export async function accounts(db: Database, currency: string, asOf = new Date()
     is_active: number;
     hidden: number;
     institution_name: string | null;
-    logo: string | null;
+    has_logo: number;
+    item_id: string;
     current_amount_micros: number | null;
     available_amount_micros: number | null;
     observed_at: string | null;
   }>(
     db,
-    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.subtype,a.is_active,a.hidden,i.institution_name,i.logo,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? ORDER BY a.type,COALESCE(a.custom_name,a.name)`,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.subtype,a.is_active,a.hidden,i.institution_name,i.logo IS NOT NULL AS has_logo,a.plaid_item_id AS item_id,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? ORDER BY a.type,COALESCE(a.custom_name,a.name)`,
     currency,
     asOf,
     currency,
@@ -477,7 +480,8 @@ export async function accounts(db: Database, currency: string, asOf = new Date()
       active: !!r.is_active,
       hidden: !!r.hidden,
       institution_name: r.institution_name,
-      logo: r.logo,
+      has_logo: !!r.has_logo,
+      item_id: r.item_id,
       current: r.current_amount_micros === null ? null : money(r.current_amount_micros, currency),
       available:
         r.available_amount_micros === null ? null : money(r.available_amount_micros, currency),

@@ -14,6 +14,7 @@ import {
 import * as metrics from '../../../../packages/analytics/service';
 import { report } from '../../../../packages/reports/engine';
 import { getSetupStatus } from '../../../../packages/security/setup';
+import { sha256 } from '../../../../packages/security/crypto';
 import { plaidRoute } from './plaid';
 export async function dashboardApi(request: Request, env: AppEnv) {
   const s = await requireSession(request, env),
@@ -22,6 +23,25 @@ export async function dashboardApi(request: Request, env: AppEnv) {
   if (!['GET', 'HEAD'].includes(request.method)) requireCsrf(request, env, s);
   const plaid = await plaidRoute(request, env, s);
   if (plaid) return plaid;
+  const logoMatch = /^\/api\/institutions\/([^/]+)\/logo$/.exec(path);
+  if (request.method === 'GET' && logoMatch) {
+    const row = await first<{ logo: string | null }>(
+      env.DB,
+      'SELECT logo FROM plaid_items WHERE id=?',
+      logoMatch[1],
+    );
+    invariant(row, 404, 'INSTITUTION_NOT_FOUND');
+    if (!row.logo) return new Response('Not found', { status: 404 });
+    const etag = `"${await sha256(row.logo)}"`;
+    const headers: Record<string, string> = {
+      ETag: etag,
+      'Cache-Control': 'private, max-age=604800',
+    };
+    if (request.headers.get('If-None-Match') === etag)
+      return new Response(null, { status: 304, headers });
+    const bytes = Uint8Array.from(atob(row.logo), (c) => c.charCodeAt(0));
+    return new Response(bytes, { headers: { ...headers, 'Content-Type': 'image/png' } });
+  }
   if (request.method === 'GET' && path === '/api/setup')
     return Response.json(await getSetupStatus(env));
   const currency = currencySchema.parse(url.searchParams.get('currency') ?? 'CAD');
@@ -222,7 +242,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       return Response.json({
         connections: await all(
           env.DB,
-          'SELECT id,institution_name,status,last_successful_sync_at,history_complete,disconnected_at,logo,primary_color FROM plaid_items ORDER BY created_at',
+          'SELECT id,institution_name,status,last_successful_sync_at,history_complete,disconnected_at,primary_color,logo IS NOT NULL AS has_logo FROM plaid_items ORDER BY created_at',
         ),
         data_freshness: await metrics.dataHealth(env.DB),
       });

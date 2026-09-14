@@ -431,6 +431,31 @@ it('persists the net-worth estimate setting', async () => {
     close();
   }
 });
+it('serves institution logos with a cacheable ETag and 304s', async () => {
+  const { db, env, request, close } = await setup();
+  try {
+    const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
+    await db
+      .prepare("UPDATE plaid_items SET logo=? WHERE id='item'")
+      .bind(png)
+      .run();
+    const res = await dashboardApi(request('/api/institutions/item/logo', 'GET'), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('image/png');
+    expect(res.headers.get('Cache-Control')).toBe('private, max-age=604800');
+    const etag = res.headers.get('ETag');
+    expect(etag).toBeTruthy();
+    const cached = await dashboardApi(
+      new Request(env.APP_ORIGIN + '/api/institutions/item/logo', {
+        headers: { Cookie: 'finance_session=test-session', 'If-None-Match': etag! },
+      }),
+      env,
+    );
+    expect(cached.status).toBe(304);
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);

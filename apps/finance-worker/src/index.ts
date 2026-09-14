@@ -11,6 +11,22 @@ import { HttpError, readBody } from '../../../packages/shared/errors';
 import { verifyWebhook } from '../../../packages/plaid/webhooks';
 import { PlaidClient, PlaidError } from '../../../packages/plaid/client';
 import { first, stmt, revision } from '../../../packages/db/repository';
+const PRIVATE_PATHS = ['/login', '/callback', '/token', '/register', '/health'];
+function cacheControlFor(pathname: string, method: string): string {
+  if (method !== 'GET' && method !== 'HEAD') return 'private, no-store';
+  if (pathname.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
+  if (pathname === '/favicon.svg') return 'public, max-age=604800';
+  if (
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/mcp') ||
+    pathname.startsWith('/webhooks/') ||
+    pathname.startsWith('/authorize') ||
+    PRIVATE_PATHS.includes(pathname)
+  )
+    return 'private, no-store';
+  // Static SPA shell: stored but revalidated so a rebuild is picked up (304 otherwise).
+  return 'public, max-age=0, must-revalidate';
+}
 async function routes(request: Request, env: AppEnv): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === '/health') {
@@ -140,7 +156,13 @@ export default {
       response = Response.json({ error: code }, { status });
     }
     const secured = new Response(response.body, response);
-    secured.headers.set('Cache-Control', 'no-store');
+    const reqUrl = new URL(request.url);
+    // Immutable hashed assets and the SPA shell may be cached by the browser;
+    // everything dynamic stays private. Endpoints that set their own
+    // Cache-Control (e.g. institution logos) are left untouched.
+    if (!/^\/api\/institutions\/[^/]+\/logo$/.test(reqUrl.pathname)) {
+      secured.headers.set('Cache-Control', cacheControlFor(reqUrl.pathname, request.method));
+    }
     secured.headers.set('X-Content-Type-Options', 'nosniff');
     secured.headers.set('Referrer-Policy', 'no-referrer');
     secured.headers.set('X-Frame-Options', 'DENY');

@@ -2463,8 +2463,12 @@ function OverviewView({
             <div className="card card-flat" style={{ padding: 'var(--sp-4)' }} key={a.id}>
               <div className="od-row" style={{ justifyContent: 'space-between' }}>
                 <span className="quiet">{label(a.type)}</span>
-                {a.logo ? (
-                  <img className="inst-logo" src={`data:image/png;base64,${a.logo}`} alt="" />
+                {a.has_logo ? (
+                  <img
+                    className="inst-logo"
+                    src={`/api/institutions/${a.item_id}/logo`}
+                    alt=""
+                  />
                 ) : (
                   <Icon
                     name={a.type === 'credit' || a.type === 'loan' ? 'cards' : 'wallet'}
@@ -3414,9 +3418,9 @@ function AccountsView({
     <div key={i.id} className="card card-flat" style={{ marginBottom: 'var(--sp-4)' }}>
       <div className="od-row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div className="od-row od-fill" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
-          {i.logo ? (
+          {i.has_logo ? (
             <span className="avatar avatar-logo">
-              <img src={`data:image/png;base64,${i.logo}`} alt="" />
+              <img src={`/api/institutions/${i.id}/logo`} alt="" />
             </span>
           ) : (
             <span className="avatar">
@@ -3526,9 +3530,9 @@ function AccountsView({
           ];
           const rowFor = (a: Any) => (
             <div className="row" key={a.id}>
-              {a.logo ? (
+              {a.has_logo ? (
                 <span className="avatar avatar-logo">
-                  <img src={`data:image/png;base64,${a.logo}`} alt="" />
+                  <img src={`/api/institutions/${a.item_id}/logo`} alt="" />
                 </span>
               ) : (
                 <span className="avatar">
