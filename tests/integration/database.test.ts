@@ -3,7 +3,7 @@ import { database, seedAccounts } from '../fixtures/database';
 import { tx } from '../fixtures/transactions';
 import { insert, first, all } from '../../packages/db/repository';
 import { rebuild, reconcile } from '../../packages/db/derive';
-import { spending, transactions, balances } from '../../packages/analytics/service';
+import { spending, transactions, balances, periodAttention } from '../../packages/analytics/service';
 import { report } from '../../packages/reports/engine';
 it('applies migrations and reconciles reports with manual overrides and refunds', async () => {
   const { db, close } = database();
@@ -122,6 +122,46 @@ it('versions report inputs when budget limits change', async () => {
     const updated = await report(db, p, 'monthly', true);
     expect(updated.data_revision).toBeGreaterThan(initial.data_revision);
     expect((await all(db, 'SELECT id FROM report_runs')).length).toBe(2);
+  } finally {
+    close();
+  }
+});
+it('projects pace from elapsed days, not the whole selected month', async () => {
+  const { db, close } = database();
+  try {
+    await seedAccounts(db);
+    for (const date of ['2026-06-15', '2026-07-15', '2026-08-15'])
+      await insert(
+        db,
+        'transactions',
+        tx('base-' + date, -100000000, {
+          date,
+          merchant_name: 'Uber',
+          plaid_primary_category: 'TRANSPORTATION',
+          plaid_detailed_category: 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES',
+        }),
+      ).run();
+    await insert(
+      db,
+      'transactions',
+      tx('current', -200000000, {
+        date: '2026-09-05',
+        merchant_name: 'Uber',
+        plaid_primary_category: 'TRANSPORTATION',
+        plaid_detailed_category: 'TRANSPORTATION_TAXIS_AND_RIDE_SHARES',
+      }),
+    ).run();
+    await rebuild(db);
+    const p = { start_date: '2026-09-01', end_date: '2026-09-30', currency: 'CAD' };
+    const early = await periodAttention(db, p, '2026-09-15');
+    const late = await periodAttention(db, p, '2026-09-30');
+    expect(early.pace.days_elapsed).toBe(15);
+    expect(late.pace.days_elapsed).toBe(30);
+    const signal = early.category_signals.find((s) => s.category === 'transportation');
+    expect(signal?.spent_to_date.amount).toBe('200.000000');
+    expect(signal?.projected_month_spending.amount).toBe('400.000000');
+    // By month end the same spending is no longer off-pace.
+    expect(late.category_signals.find((s) => s.category === 'transportation')).toBeUndefined();
   } finally {
     close();
   }

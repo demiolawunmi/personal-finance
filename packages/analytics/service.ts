@@ -660,13 +660,18 @@ export async function goals(db: Database, currency: string) {
   }));
 }
 export { reconcile };
-export async function periodAttention(db: Database, p: Period) {
+export async function periodAttention(db: Database, p: Period, asOf = today()) {
   await ensureDerived(db);
   const month = monthPeriod(p.end_date, p.currency);
   const previousEnd = new Date(month.start_date);
   previousEnd.setUTCDate(0);
   const baselineStart = new Date(month.start_date);
   baselineStart.setUTCMonth(baselineStart.getUTCMonth() - 3);
+  const daysInMonth = dayDiff(month.start_date, month.end_date) + 1;
+  // A selected period that ends in the future (the current month's default range
+  // does) must project from the days actually elapsed, not the whole month.
+  const elapsedTo = [p.end_date, asOf, month.end_date].sort()[0];
+  const daysElapsed = Math.min(daysInMonth, Math.max(1, dayDiff(month.start_date, elapsedTo) + 1));
   const [rows, current, totals] = await Promise.all([
     all<{ category_id: string; month: string; total: number }>(
       db,
@@ -680,18 +685,16 @@ export async function periodAttention(db: Database, p: Period) {
       'SELECT category_id,SUM(spending_micros) total FROM daily_category_totals WHERE currency=? AND date BETWEEN ? AND ? GROUP BY category_id',
       p.currency,
       month.start_date,
-      p.end_date,
+      elapsedTo,
     ),
     first<{ total: number }>(
       db,
       'SELECT COALESCE(SUM(spending_micros),0) total FROM daily_category_totals WHERE currency=? AND date BETWEEN ? AND ?',
       p.currency,
       month.start_date,
-      p.end_date,
+      elapsedTo,
     ),
   ]);
-  const daysInMonth = dayDiff(month.start_date, month.end_date) + 1;
-  const daysElapsed = Math.min(daysInMonth, Math.max(1, dayDiff(month.start_date, p.end_date) + 1));
   const elapsedFraction = daysElapsed / daysInMonth;
   const confidence: 'low' | 'high' = daysElapsed < 5 ? 'low' : 'high';
   const threshold = p.currency === 'CAD' || p.currency === 'USD' ? 300_000_000 : undefined;
