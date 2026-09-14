@@ -548,7 +548,11 @@ async function apiRetry(path: string, attempts = 8): Promise<any> {
     try {
       return await api(path);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'DERIVED_DATA_REBUILDING' && i < attempts - 1) {
+      if (
+        e instanceof ApiError &&
+        (e.code === 'DERIVED_DATA_REBUILDING' || e.code === 'DATA_CHANGED_RETRY') &&
+        i < attempts - 1
+      ) {
         await new Promise((r) => setTimeout(r, 700 + i * 500));
         continue;
       }
@@ -678,6 +682,7 @@ export default function App() {
     api('/api/session')
       .then((s) => {
         setSession(s);
+        if (Array.isArray(s.categories)) setCategories(s.categories);
         if (s.setup_required && location.pathname === '/') {
           setView('setup');
           history.replaceState(null, '', '/setup');
@@ -685,12 +690,6 @@ export default function App() {
       })
       .catch(() => setSession(null));
   }, []);
-  useEffect(() => {
-    if (session)
-      api('/api/categories')
-        .then(setCategories)
-        .catch((e) => setError(e.message));
-  }, [session]);
 
   /* primary data per view */
   useEffect(() => {
@@ -708,7 +707,7 @@ export default function App() {
       if (filterAccount) params.set('account_id', filterAccount);
       if (filterStatus) params.set('status', filterStatus);
     }
-    const needsBalances = view === 'transactions' || view === 'accounts';
+    const needsBalances = view === 'transactions';
     Promise.all([
       apiRetry('/api/' + ENDPOINTS[view] + '?' + params),
       needsBalances ? apiRetry('/api/balances?' + params) : Promise.resolve(null),

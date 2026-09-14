@@ -31,6 +31,29 @@ const requiredTables = [
 
 const configured = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
 
+/** Cheap gate for /api/session: config present and at least one live institution.
+ *  The full check list stays on /api/setup. */
+export async function setupRequired(env: SetupEnv): Promise<boolean> {
+  const configReady =
+    configured(env.GITHUB_CLIENT_ID) &&
+    configured(env.GITHUB_CLIENT_SECRET) &&
+    configured(env.OWNER_GITHUB_ID) &&
+    configured(env.TOKEN_ENCRYPTION_KEY) &&
+    configured(env.COOKIE_ENCRYPTION_KEY) &&
+    configured(env.PLAID_CLIENT_ID) &&
+    configured(env.PLAID_SECRET);
+  if (!configReady) return true;
+  try {
+    const row = await first<{ n: number }>(
+      env.DB,
+      'SELECT COUNT(*) n FROM plaid_items WHERE disconnected_at IS NULL',
+    );
+    return Number(row?.n ?? 0) === 0;
+  } catch {
+    return true;
+  }
+}
+
 export async function getSetupStatus(env: SetupEnv) {
   const checks: SetupCheck[] = [];
   const githubReady =

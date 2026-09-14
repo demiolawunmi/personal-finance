@@ -16,8 +16,8 @@ function cacheControlFor(pathname: string, method: string): string {
   if (method !== 'GET' && method !== 'HEAD') return 'private, no-store';
   if (pathname.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
   if (pathname === '/favicon.svg') return 'public, max-age=604800';
+  if (pathname.startsWith('/api/')) return 'private, no-store';
   if (
-    pathname.startsWith('/api/') ||
     pathname.startsWith('/mcp') ||
     pathname.startsWith('/webhooks/') ||
     pathname.startsWith('/authorize') ||
@@ -79,9 +79,13 @@ async function routes(request: Request, env: AppEnv): Promise<Response> {
   const auth = await oauthRoute(request, env);
   if (auth) return auth;
   if (url.pathname.startsWith('/api/')) {
+    // Mutations skip the revision fence; only reads need it (and the second
+    // read only happens for reads).
+    if (request.method !== 'GET' && request.method !== 'HEAD')
+      return dashboardApi(request, env);
     const before = await revision(env.DB);
     const response = await dashboardApi(request, env);
-    if (request.method === 'GET' && (await revision(env.DB)).data_revision !== before.data_revision)
+    if ((await revision(env.DB)).data_revision !== before.data_revision)
       throw new HttpError(409, 'DATA_CHANGED_RETRY');
     return response;
   }

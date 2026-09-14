@@ -13,7 +13,7 @@ import {
 } from '../../../../packages/domain/periods';
 import * as metrics from '../../../../packages/analytics/service';
 import { report } from '../../../../packages/reports/engine';
-import { getSetupStatus } from '../../../../packages/security/setup';
+import { getSetupStatus, setupRequired } from '../../../../packages/security/setup';
 import { sha256 } from '../../../../packages/security/crypto';
 import { plaidRoute } from './plaid';
 export async function dashboardApi(request: Request, env: AppEnv) {
@@ -61,7 +61,11 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         user_id: s.user_id,
         csrf_token: s.csrf_token,
         environment: env.APP_ENV,
-        setup_required: (await getSetupStatus(env)).status !== 'ready',
+        setup_required: await setupRequired(env),
+        categories: await all(
+          env.DB,
+          'SELECT id,display_name,type FROM categories ORDER BY display_name',
+        ),
       });
     if (path === '/api/overview') {
       const settings = await metrics.getSettings(env.DB);

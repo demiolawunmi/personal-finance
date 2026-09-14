@@ -21,7 +21,7 @@ export async function session(request: Request, env: AppEnv): Promise<Session | 
   if (!token) return null;
   const row = await first<Session>(
     env.DB,
-    'SELECT * FROM sessions WHERE id_hash=? AND expires_at>?',
+    'SELECT id_hash,user_id,csrf_token,expires_at FROM sessions WHERE id_hash=? AND expires_at>?',
     await sha256(token),
     new Date().toISOString(),
   );
