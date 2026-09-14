@@ -840,13 +840,14 @@ export async function trends(db: Database, p: Period, months = 6) {
       .map((m) => {
         if (netWorth.has(m.month)) carried = netWorth.get(m.month)!;
         else if (carried !== null) carried += m.net;
-        else carried = m.net;
+        // Before the first recorded balance snapshot the net worth is unknown;
+        // do not fabricate it from cash flow (that produced nonsense values).
         return {
           month: m.month,
           income: m.income / 1_000_000,
           spending: m.spending / 1_000_000,
           net: m.net / 1_000_000,
-          net_worth: carried / 1_000_000,
+          net_worth: carried === null ? null : carried / 1_000_000,
         };
       }),
   };

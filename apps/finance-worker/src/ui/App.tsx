@@ -2082,13 +2082,30 @@ function PeriodPicker({
   );
 }
 function HeroCard({ d }: { d: Any }) {
-  const months = d.trends?.months ?? [];
-  const series = months.map((m: Any) => m.net_worth);
+  const months: Any[] = d.trends?.months ?? [];
+  const series: number[] = months
+    .map((m: Any) => m.net_worth)
+    .filter((v: number | null) => v != null);
   const netWorth = d.balances?.net_worth ?? { amount: '0', currency: d.currency };
-  const prev = series.length > 1 ? series[series.length - 2] : num(netWorth);
-  const change = num(netWorth) - (prev ?? num(netWorth));
-  const pct = prev ? change / prev : 0;
+  const currentMonth = months.length ? months[months.length - 1].month : null;
+  const priors = months.filter(
+    (m: Any) => m.net_worth != null && (!currentMonth || m.month < currentMonth),
+  );
+  const prevMonth = priors.length ? priors[priors.length - 1].month : null;
+  const prev: number | null = priors.length ? priors[priors.length - 1].net_worth : null;
+  const change = prev == null ? 0 : num(netWorth) - prev;
+  // A percentage against a zero/negative base is meaningless, so omit it.
+  const pct = prev != null && prev > 0 ? change / prev : null;
   const up = change >= 0;
+  const expectedPrev = currentMonth
+    ? (() => {
+        const x = new Date(currentMonth + '-01T12:00:00Z');
+        x.setUTCMonth(x.getUTCMonth() - 1);
+        return x.toISOString().slice(0, 7);
+      })()
+    : null;
+  const prevLabel =
+    prevMonth && prevMonth === expectedPrev ? 'vs. last month' : `vs. ${monthLabel(prevMonth!)}`;
   return (
     <section className="card">
       <div className="hero">
@@ -2100,15 +2117,17 @@ function HeroCard({ d }: { d: Any }) {
               format={(n) => fmtMoney({ amount: String(n), currency: d.currency })}
             />
           </span>
-          <span className="hero-sub">
-            <span className={'delta ' + (up ? 'up' : 'down')}>
-              <Icon name={up ? 'arrowUp' : 'arrowDown'} />
-              {up ? '+' : ''}
-              {fmtMoney({ amount: String(change), currency: d.currency })}
-              {prev ? ` (${fmtPct(pct, 1)})` : ''}
+          {prev != null && (
+            <span className="hero-sub">
+              <span className={'delta ' + (up ? 'up' : 'down')}>
+                <Icon name={up ? 'arrowUp' : 'arrowDown'} />
+                {up ? '+' : ''}
+                {fmtMoney({ amount: String(change), currency: d.currency })}
+                {pct != null ? ` (${fmtPct(pct, 1)})` : ''}
+              </span>
+              <span>{prevLabel}</span>
             </span>
-            <span>vs. last month</span>
-          </span>
+          )}
           <Sparkline values={series} />
         </div>
         <div className="od-stack" style={gap('var(--sp-4)')}>

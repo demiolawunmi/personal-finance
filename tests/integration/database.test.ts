@@ -3,7 +3,13 @@ import { database, seedAccounts } from '../fixtures/database';
 import { tx } from '../fixtures/transactions';
 import { insert, first, all } from '../../packages/db/repository';
 import { rebuild, reconcile } from '../../packages/db/derive';
-import { spending, transactions, balances, periodAttention } from '../../packages/analytics/service';
+import {
+  spending,
+  transactions,
+  balances,
+  periodAttention,
+  trends,
+} from '../../packages/analytics/service';
 import { report } from '../../packages/reports/engine';
 it('applies migrations and reconciles reports with manual overrides and refunds', async () => {
   const { db, close } = database();
@@ -162,6 +168,33 @@ it('projects pace from elapsed days, not the whole selected month', async () => 
     expect(signal?.projected_month_spending.amount).toBe('400.000000');
     // By month end the same spending is no longer off-pace.
     expect(late.category_signals.find((s) => s.category === 'transportation')).toBeUndefined();
+  } finally {
+    close();
+  }
+});
+it('trends does not fabricate net worth before the first balance snapshot', async () => {
+  const { db, close } = database();
+  try {
+    await seedAccounts(db);
+    await insert(db, 'transactions', tx('jun', -100000000, { date: '2026-06-15' })).run();
+    await insert(db, 'transactions', tx('jul', -100000000, { date: '2026-07-15' })).run();
+    await insert(db, 'transactions', tx('aug', -100000000, { date: '2026-08-15' })).run();
+    await insert(db, 'balance_snapshots', {
+      id: 's1',
+      account_id: 'checking',
+      current_amount_micros: 500000000,
+      currency: 'CAD',
+      observed_at: '2026-08-15T10:00:00.000Z',
+    }).run();
+    await rebuild(db);
+    const t = await trends(
+      db,
+      { start_date: '2026-08-01', end_date: '2026-08-31', currency: 'CAD' },
+      6,
+    );
+    expect(t.months.find((m) => m.month === '2026-06')?.net_worth).toBeNull();
+    expect(t.months.find((m) => m.month === '2026-07')?.net_worth).toBeNull();
+    expect(t.months.find((m) => m.month === '2026-08')?.net_worth).toBe(500);
   } finally {
     close();
   }
