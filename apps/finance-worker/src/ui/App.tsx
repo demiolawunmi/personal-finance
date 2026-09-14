@@ -2318,7 +2318,11 @@ function OverviewView({
                 />
                 <span className="ring-center">
                   <strong>
-                    <CountUp value={(rate ?? 0) * 100} format={(n) => n.toFixed(0) + '%'} />
+                    {rate == null ? (
+                      '—'
+                    ) : (
+                      <CountUp value={rate * 100} format={(n) => n.toFixed(0) + '%'} />
+                    )}
                   </strong>
                   <span>saved</span>
                 </span>
