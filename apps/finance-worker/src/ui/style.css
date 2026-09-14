@@ -770,6 +770,27 @@ pre {
   width: 19px;
   height: 19px;
 }
+.avatar-logo {
+  background: #fff;
+  overflow: hidden;
+  padding: 2px;
+  box-sizing: border-box;
+}
+.avatar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.inst-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: #fff;
+  padding: 2px;
+  box-sizing: border-box;
+}
 
 /* --------------------------------------------------------------- pills */
 .pill {

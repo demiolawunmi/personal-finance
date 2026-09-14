@@ -62,7 +62,7 @@ export async function dataHealth(db: Database) {
     disappeared_accounts: number;
   }>(
     db,
-    `SELECT (SELECT COUNT(*) FROM effective_transactions WHERE kind='unclassified_inflow' AND pending=0) unknown_inflows,(SELECT COUNT(*) FROM anomalies a LEFT JOIN anomaly_reviews r ON r.anomaly_id=a.id WHERE a.kind='duplicate_candidate' AND (r.status IS NULL OR r.status='open')) duplicate_candidates,(SELECT COUNT(*) FROM accounts a JOIN plaid_items i ON i.id=a.plaid_item_id WHERE a.is_active=0 AND i.disconnected_at IS NULL) disappeared_accounts`,
+    `SELECT (SELECT COUNT(*) FROM effective_transactions WHERE kind='unclassified_inflow' AND pending=0) unknown_inflows,(SELECT COUNT(*) FROM anomalies a LEFT JOIN anomaly_reviews r ON r.anomaly_id=a.id WHERE a.kind='duplicate_candidate' AND (r.status IS NULL OR r.status='open')) duplicate_candidates,(SELECT COUNT(*) FROM accounts a JOIN plaid_items i ON i.id=a.plaid_item_id WHERE a.is_active=0 AND a.hidden=0 AND i.disconnected_at IS NULL) disappeared_accounts`,
   );
   const mismatch = rev.data_revision !== rev.derived_revision;
   const status =
@@ -399,9 +399,11 @@ export async function balances(db: Database, currency: string, asOf = new Date()
     current_amount_micros: number | null;
     available_amount_micros: number | null;
     observed_at: string | null;
+    institution_name: string | null;
+    logo: string | null;
   }>(
     db,
-    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.is_active,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=?`,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.is_active,i.institution_name,i.logo,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? AND a.hidden=0`,
     currency,
     asOf,
     currency,
@@ -436,6 +438,46 @@ export async function balances(db: Database, currency: string, asOf = new Date()
       name: r.name,
       type: r.type,
       active: !!r.is_active,
+      institution_name: r.institution_name,
+      logo: r.logo,
+      current: r.current_amount_micros === null ? null : money(r.current_amount_micros, currency),
+      available:
+        r.available_amount_micros === null ? null : money(r.available_amount_micros, currency),
+      observed_at: r.observed_at,
+    })),
+  };
+}
+/** Every account, including ones the owner has hidden, for the management screen. */
+export async function accounts(db: Database, currency: string, asOf = new Date().toISOString()) {
+  const rows = await all<{
+    id: string;
+    name: string;
+    type: string;
+    subtype: string | null;
+    is_active: number;
+    hidden: number;
+    institution_name: string | null;
+    logo: string | null;
+    current_amount_micros: number | null;
+    available_amount_micros: number | null;
+    observed_at: string | null;
+  }>(
+    db,
+    `SELECT a.id,COALESCE(a.custom_name,a.name) AS name,a.type,a.subtype,a.is_active,a.hidden,i.institution_name,i.logo,b.current_amount_micros,b.available_amount_micros,b.observed_at FROM accounts a LEFT JOIN plaid_items i ON i.id=a.plaid_item_id LEFT JOIN balance_snapshots b ON b.id=(SELECT id FROM balance_snapshots WHERE account_id=a.id AND currency=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1) WHERE a.currency=? ORDER BY a.type,COALESCE(a.custom_name,a.name)`,
+    currency,
+    asOf,
+    currency,
+  );
+  return {
+    accounts: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      subtype: r.subtype,
+      active: !!r.is_active,
+      hidden: !!r.hidden,
+      institution_name: r.institution_name,
+      logo: r.logo,
       current: r.current_amount_micros === null ? null : money(r.current_amount_micros, currency),
       available:
         r.available_amount_micros === null ? null : money(r.available_amount_micros, currency),

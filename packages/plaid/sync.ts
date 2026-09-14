@@ -14,6 +14,10 @@ import type { Transaction } from '../domain/transactions';
 export type Item = {
   id: string;
   plaid_item_id: string;
+  institution_id: string | null;
+  institution_name: string | null;
+  logo: string | null;
+  primary_color: string | null;
   access_token_ciphertext: string | null;
   access_token_iv: string | null;
   key_version: string | null;
@@ -209,6 +213,27 @@ export async function syncItem(db: Database, client: PlaidClient, keys: TokenKey
     status: 'running',
   }).run();
   try {
+    // Backfill institution branding once; it is optional metadata.
+    if (!item.logo && item.institution_id) {
+      try {
+        const meta = await client.call<{
+          institution: { logo: string | null; primary_color: string | null };
+        }>('/institutions/get_by_id', {
+          institution_id: item.institution_id,
+          country_codes: ['CA'],
+          options: { include_optional_metadata: true },
+        });
+        await stmt(
+          db,
+          'UPDATE plaid_items SET logo=?,primary_color=? WHERE id=?',
+          meta.institution.logo ?? null,
+          meta.institution.primary_color ?? null,
+          itemId,
+        ).run();
+      } catch {
+        /* Branding is optional; never block a sync on it. */
+      }
+    }
     const pages = await collectSync(client, await accessToken(item, keys), item.sync_cursor);
     const accountsResponse = await client.call<{ accounts: PlaidAccount[] }>('/accounts/get', {
       access_token: await accessToken(item, keys),

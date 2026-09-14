@@ -216,11 +216,12 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         integrity: await metrics.reconcile(env.DB),
       });
     if (path === '/api/balances') return Response.json(await metrics.balances(env.DB, currency));
+    if (path === '/api/accounts') return Response.json(await metrics.accounts(env.DB, currency));
     if (path === '/api/connections')
       return Response.json({
         connections: await all(
           env.DB,
-          'SELECT id,institution_name,status,last_successful_sync_at,history_complete,disconnected_at FROM plaid_items ORDER BY created_at',
+          'SELECT id,institution_name,status,last_successful_sync_at,history_complete,disconnected_at,logo,primary_color FROM plaid_items ORDER BY created_at',
         ),
         data_freshness: await metrics.dataHealth(env.DB),
       });
@@ -292,23 +293,38 @@ export async function dashboardApi(request: Request, env: AppEnv) {
   const account = /^\/api\/accounts\/([^/]+)$/.exec(path);
   if (request.method === 'PATCH' && account) {
     const b = z
-      .object({ name: z.string().trim().max(100).nullable() })
+      .object({
+        name: z.string().trim().max(100).nullable().optional(),
+        hidden: z.boolean().optional(),
+      })
       .strict()
       .parse(body ?? {});
+    invariant(b.name !== undefined || b.hidden !== undefined, 400, 'NOTHING_TO_UPDATE');
     invariant(
       await first(env.DB, 'SELECT id FROM accounts WHERE id=?', account[1]),
       404,
       'ACCOUNT_NOT_FOUND',
     );
+    const sets = ['updated_at=?'];
+    const params: unknown[] = [new Date().toISOString()];
+    if (b.name !== undefined) {
+      sets.push('custom_name=?');
+      params.push(b.name ? b.name : null);
+    }
+    if (b.hidden !== undefined) {
+      sets.push('hidden=?');
+      params.push(b.hidden ? 1 : 0);
+    }
+    params.push(account[1]);
     await env.DB.batch([
-      stmt(
+      stmt(env.DB, `UPDATE accounts SET ${sets.join(',')} WHERE id=?`, ...params),
+      auditStatement(
         env.DB,
-        'UPDATE accounts SET custom_name=?,updated_at=? WHERE id=?',
-        b.name ? b.name : null,
-        new Date().toISOString(),
+        b.hidden !== undefined ? (b.hidden ? 'ACCOUNT_HIDDEN' : 'ACCOUNT_SHOWN') : 'ACCOUNT_RENAMED',
+        'account',
         account[1],
+        s.user_id,
       ),
-      auditStatement(env.DB, 'ACCOUNT_RENAMED', 'account', account[1], s.user_id),
     ]);
     return Response.json({ saved: true });
   }

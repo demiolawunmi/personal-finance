@@ -218,6 +218,9 @@ const PATHS: Record<string, string> = {
   refresh: '<path d="M20 11a8 8 0 1 0-2 5.5"/><path d="M20 5v6h-6"/>',
   link: '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
   edit: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/>',
+  eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+  eyeOff:
+    '<path d="M3 3l18 18"/><path d="M10.6 6.2A10 10 0 0 1 12 6c6.4 0 10 6 10 6a13 13 0 0 1-3.3 3.8"/><path d="M6.4 6.9C3.7 8.2 2 12 2 12a13 13 0 0 0 3.6 4.2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 7H6"/>',
   fork: '<path d="M7 3v7a2 2 0 0 0 4 0V3"/><path d="M9 10v11"/><path d="M16 3c-1.5 1-2 2.5-2 4.5S14.8 11 16 11v10"/>',
@@ -624,6 +627,7 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState('');
   const [data, setData] = useState<Any>(null);
   const [accounts, setAccounts] = useState<Any[]>([]);
+  const [manageAccounts, setManageAccounts] = useState<Any[]>([]);
   const [categories, setCategories] = useState<Any[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -708,11 +712,13 @@ export default function App() {
     Promise.all([
       apiRetry('/api/' + ENDPOINTS[view] + '?' + params),
       needsBalances ? apiRetry('/api/balances?' + params) : Promise.resolve(null),
+      view === 'accounts' ? apiRetry('/api/accounts?' + params) : Promise.resolve(null),
     ])
-      .then(([primary, balances]) => {
+      .then(([primary, balances, manage]) => {
         if (!active) return;
         setData(primary);
         if (balances) setAccounts(balances.accounts ?? []);
+        if (manage) setManageAccounts(manage.accounts ?? []);
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -1186,7 +1192,7 @@ export default function App() {
               {!loading && view === 'accounts' && data && (
                 <AccountsView
                   d={data}
-                  accounts={accounts}
+                  accounts={manageAccounts}
                   demo={session.environment === 'demo'}
                   busy={busy}
                   connect={connect}
@@ -2440,10 +2446,14 @@ function OverviewView({
             <div className="card card-flat" style={{ padding: 'var(--sp-4)' }} key={a.id}>
               <div className="od-row" style={{ justifyContent: 'space-between' }}>
                 <span className="quiet">{label(a.type)}</span>
-                <Icon
-                  name={a.type === 'credit' || a.type === 'loan' ? 'cards' : 'wallet'}
-                  className="muted"
-                />
+                {a.logo ? (
+                  <img className="inst-logo" src={`data:image/png;base64,${a.logo}`} alt="" />
+                ) : (
+                  <Icon
+                    name={a.type === 'credit' || a.type === 'loan' ? 'cards' : 'wallet'}
+                    className="muted"
+                  />
+                )}
               </div>
               <div className="row-title" style={{ marginTop: 'var(--sp-2)' }}>
                 {a.name}
@@ -3386,12 +3396,23 @@ function AccountsView({
   const conns = list.map((i: Any) => (
     <div key={i.id} className="card card-flat" style={{ marginBottom: 'var(--sp-4)' }}>
       <div className="od-row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className="od-stack" style={gap('var(--sp-1)')}>
-          <span className="row-title">{i.institution_name}</span>
-          <span className="row-sub">
-            Last sync {relTime(i.last_successful_sync_at)} ·{' '}
-            {i.history_complete ? 'history loaded' : 'history incomplete'}
-          </span>
+        <div className="od-row od-fill" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
+          {i.logo ? (
+            <span className="avatar avatar-logo">
+              <img src={`data:image/png;base64,${i.logo}`} alt="" />
+            </span>
+          ) : (
+            <span className="avatar">
+              <Icon name="wallet" />
+            </span>
+          )}
+          <div className="od-stack" style={gap('var(--sp-1)')}>
+            <span className="row-title">{i.institution_name}</span>
+            <span className="row-sub">
+              Last sync {relTime(i.last_successful_sync_at)} ·{' '}
+              {i.history_complete ? 'history loaded' : 'history incomplete'}
+            </span>
+          </div>
         </div>
         <span className={'pill ' + statusTone(i.status)}>{label(i.status)}</span>
       </div>
@@ -3443,7 +3464,6 @@ function AccountsView({
       </div>
     </div>
   ));
-  const groups = ['depository', 'credit', 'loan'];
   return (
     <div className="content">
       <Card
@@ -3473,49 +3493,93 @@ function AccountsView({
           />
         )}
       </Card>
-      <Card title="Accounts">
-        {groups.map((g) => {
-          const group = accounts.filter((a) => a.type === g);
-          if (!group.length) return null;
-          return (
-            <div className="od-stack" style={gap('var(--sp-2)')} key={g}>
-              <span className="eyebrow">{label(g)}</span>
-              {group.map((a) => (
-                <div className="row" key={a.id}>
-                  <span className="avatar">
-                    <Icon name={g === 'depository' ? 'wallet' : 'cards'} />
-                  </span>
-                  <span className="od-fill">
-                    <span className="row-title">{a.name}</span>
-                    <span className="row-sub">
-                      Updated {relTime(a.observed_at)}
-                      {a.available ? ' · ' + fmtMoney(a.available) + ' available' : ''}
-                    </span>
-                  </span>
-                  <button
-                    className="icon-btn"
-                    aria-label="Rename account"
-                    title="Rename account"
-                    disabled={busy || demo}
-                    onClick={() => {
-                      const next = prompt('Account name', a.name);
-                      if (next === null) return;
-                      void mutate(
-                        `/api/accounts/${a.id}`,
-                        { name: next.trim() || null },
-                        'PATCH',
-                      );
-                    }}
-                  >
-                    <Icon name="edit" />
-                  </button>
-                  <span className="row-amount tnum">{fmtMoney(a.current)}</span>
-                </div>
-              ))}
+      <Card
+        title="Accounts"
+        extra={
+          <span className="quiet">Hide closed accounts — they leave balances and net worth</span>
+        }
+      >
+        {(() => {
+          const visible = accounts.filter((a: Any) => !a.hidden);
+          const hidden = accounts.filter((a: Any) => a.hidden);
+          const order = ['depository', 'investment', 'credit', 'loan'];
+          const types = [
+            ...order,
+            ...[...new Set(visible.map((a: Any) => a.type))].filter((t) => !order.includes(t)),
+          ];
+          const rowFor = (a: Any) => (
+            <div className="row" key={a.id}>
+              {a.logo ? (
+                <span className="avatar avatar-logo">
+                  <img src={`data:image/png;base64,${a.logo}`} alt="" />
+                </span>
+              ) : (
+                <span className="avatar">
+                  <Icon name={a.type === 'credit' || a.type === 'loan' ? 'cards' : 'wallet'} />
+                </span>
+              )}
+              <span className="od-fill">
+                <span className="row-title">{a.name}</span>
+                <span className="row-sub">
+                  {a.institution_name ? a.institution_name + ' · ' : ''}
+                  {a.subtype ? label(a.subtype) + ' · ' : ''}
+                  Updated {relTime(a.observed_at)}
+                </span>
+              </span>
+              <button
+                className="icon-btn"
+                aria-label="Rename account"
+                title="Rename account"
+                disabled={busy || demo}
+                onClick={() => {
+                  const next = prompt('Account name', a.name);
+                  if (next === null) return;
+                  void mutate(`/api/accounts/${a.id}`, { name: next.trim() || null }, 'PATCH');
+                }}
+              >
+                <Icon name="edit" />
+              </button>
+              <button
+                className="icon-btn"
+                aria-label={a.hidden ? 'Show account' : 'Hide account'}
+                title={
+                  a.hidden
+                    ? 'Show this account on the dashboard'
+                    : 'Hide this account from the dashboard'
+                }
+                disabled={busy || demo}
+                onClick={() => void mutate(`/api/accounts/${a.id}`, { hidden: !a.hidden }, 'PATCH')}
+              >
+                <Icon name={a.hidden ? 'eyeOff' : 'eye'} />
+              </button>
+              <span className="row-amount tnum">{fmtMoney(a.current)}</span>
             </div>
           );
-        })}
-        {!accounts.length && <p className="quiet">No accounts in this currency.</p>}
+          return (
+            <>
+              {types.map((t) => {
+                const group = visible.filter((a: Any) => a.type === t);
+                if (!group.length) return null;
+                return (
+                  <div className="od-stack" style={gap('var(--sp-2)')} key={t}>
+                    <span className="eyebrow">{label(t)}</span>
+                    {group.map(rowFor)}
+                  </div>
+                );
+              })}
+              {!visible.length && <p className="quiet">No accounts in this currency.</p>}
+              {hidden.length > 0 && (
+                <div
+                  className="od-stack"
+                  style={{ ...gap('var(--sp-2)'), marginTop: 'var(--sp-4)' }}
+                >
+                  <span className="eyebrow">Hidden</span>
+                  {hidden.map(rowFor)}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </Card>
       <p className="quiet">
         Every balance is separated by currency. Current balance comes from the last snapshot; this

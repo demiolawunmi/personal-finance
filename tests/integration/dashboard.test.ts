@@ -298,6 +298,34 @@ it('renames an account and can reset the label', async () => {
     close();
   }
 });
+it('hides an account from balances but keeps it in the management list', async () => {
+  const { env, request, close } = await setup();
+  try {
+    const hide = await dashboardApi(
+      request('/api/accounts/savings', 'PATCH', { hidden: true }),
+      env,
+    );
+    expect(((await hide.json()) as any).saved).toBe(true);
+    // Hidden: absent from dashboard balances...
+    const balances = (await (
+      await dashboardApi(request('/api/balances?currency=CAD', 'GET'), env)
+    ).json()) as any;
+    expect(balances.accounts.find((a: any) => a.id === 'savings')).toBeUndefined();
+    // ...but present (flagged) in the management list.
+    const manage = (await (
+      await dashboardApi(request('/api/accounts?currency=CAD', 'GET'), env)
+    ).json()) as any;
+    expect(manage.accounts.find((a: any) => a.id === 'savings')?.hidden).toBe(true);
+
+    await dashboardApi(request('/api/accounts/savings', 'PATCH', { hidden: false }), env);
+    const restored = (await (
+      await dashboardApi(request('/api/balances?currency=CAD', 'GET'), env)
+    ).json()) as any;
+    expect(restored.accounts.find((a: any) => a.id === 'savings')?.hidden).toBeUndefined();
+  } finally {
+    close();
+  }
+});
 it('renames a merchant across transactions through a global alias', async () => {
   const { db, env, request, close } = await setup();
   try {

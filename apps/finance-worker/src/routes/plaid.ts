@@ -72,16 +72,21 @@ export async function plaidRoute(
         access_token: exchanged.access_token,
       });
       if (info.item.institution_id) {
-        const result = await client.call<{ institution: { name: string } }>(
-          '/institutions/get_by_id',
-          { institution_id: info.item.institution_id, country_codes: ['CA'] },
-        );
+        const result = await client.call<{
+          institution: { name: string; logo: string | null; primary_color: string | null };
+        }>('/institutions/get_by_id', {
+          institution_id: info.item.institution_id,
+          country_codes: ['CA'],
+          options: { include_optional_metadata: true },
+        });
         name = result.institution.name;
         await stmt(
           env.DB,
-          'UPDATE plaid_items SET institution_id=?,institution_name=? WHERE id=?',
+          'UPDATE plaid_items SET institution_id=?,institution_name=?,logo=?,primary_color=? WHERE id=?',
           info.item.institution_id,
           name,
+          result.institution.logo ?? null,
+          result.institution.primary_color ?? null,
           id,
         ).run();
       }
