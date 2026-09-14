@@ -2115,28 +2115,11 @@ function HeroCard({ d }: { d: Any }) {
     : prevMonth === expectedPrev
       ? 'vs. last month'
       : `vs. ${monthLabel(prevMonth)}`;
+  const estimated = months.some((m: Any) => m.estimated);
   return (
     <section className="card">
       <div className="hero">
-        <div className="od-stack" style={gap('var(--sp-2)')}>
-          <span className="eyebrow">Net worth</span>
-          <span className="hero-value tnum">
-            <CountUp
-              value={num(netWorth)}
-              format={(n) => fmtMoney({ amount: String(n), currency: d.currency })}
-            />
-          </span>
-          {prev != null && (
-            <span className="hero-sub">
-              <span className={'delta ' + (up ? 'up' : 'down')}>
-                <Icon name={up ? 'arrowUp' : 'arrowDown'} />
-                {up ? '+' : ''}
-                {fmtMoney({ amount: String(change), currency: d.currency })}
-                {pct != null ? ` (${fmtPct(pct, 1)})` : ''}
-              </span>
-              <span>{prevLabel}</span>
-            </span>
-          )}
+        <div className="od-stack" style={gap('var(--sp-4)')}>
           {series.length >= 2 ? (
             <Sparkline values={series} />
           ) : (
@@ -2144,6 +2127,31 @@ function HeroCard({ d }: { d: Any }) {
               Net worth history charts here once more months of balances have synced.
             </div>
           )}
+          {estimated && (
+            <span className="quiet" style={{ fontSize: 'var(--fs-xs)' }}>
+              Earlier months are estimated from cash flow.
+            </span>
+          )}
+          <div className="od-stack" style={gap('var(--sp-2)')}>
+            <span className="eyebrow">Net worth</span>
+            <span className="hero-value tnum">
+              <CountUp
+                value={num(netWorth)}
+                format={(n) => fmtMoney({ amount: String(n), currency: d.currency })}
+              />
+            </span>
+            {prev != null && (
+              <span className="hero-sub">
+                <span className={'delta ' + (up ? 'up' : 'down')}>
+                  <Icon name={up ? 'arrowUp' : 'arrowDown'} />
+                  {up ? '+' : ''}
+                  {fmtMoney({ amount: String(change), currency: d.currency })}
+                  {pct != null ? ` (${fmtPct(pct, 1)})` : ''}
+                </span>
+                <span>{prevLabel}</span>
+              </span>
+            )}
+          </div>
         </div>
         <div className="od-stack" style={gap('var(--sp-4)')}>
           <span className="eyebrow">Balance sheet</span>
@@ -3746,6 +3754,13 @@ function SettingsView({
         .then((r) => setGrants(r.items ?? []))
         .catch(() => setGrants([]));
   }, [demo, version]);
+  const [settings, setSettings] = useState<Any>(null);
+  useEffect(() => {
+    if (demo) return;
+    api('/api/settings')
+      .then(setSettings)
+      .catch(() => setSettings(null));
+  }, [demo, version]);
   const goalRows = goals.map((g: Any) => (
     <div className="goal" key={g.id}>
       <div className="ring-wrap">
@@ -4008,6 +4023,35 @@ function SettingsView({
           </div>
           <label className="switch">
             <input type="checkbox" checked={dark} onChange={toggleTheme} aria-label="Dark theme" />
+            <span className="switch-track">
+              <span className="switch-thumb" />
+            </span>
+          </label>
+        </div>
+      </Card>
+      <Card title="Net worth history">
+        <div className="od-row" style={{ justifyContent: 'space-between' }}>
+          <div className="od-stack" style={gap('2px')}>
+            <span className="row-title">Estimate earlier months</span>
+            <span className="row-sub">
+              Reconstructs net worth before the first recorded balance using monthly cash flow.
+              These points are estimates, not recorded balances.
+            </span>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={!!settings?.estimate_net_worth}
+              disabled={busy || demo || !settings}
+              onChange={() =>
+                void mutate(
+                  '/api/settings',
+                  { estimate_net_worth: !settings?.estimate_net_worth },
+                  'PATCH',
+                )
+              }
+              aria-label="Estimate net worth history"
+            />
             <span className="switch-track">
               <span className="switch-thumb" />
             </span>

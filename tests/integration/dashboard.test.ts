@@ -417,6 +417,20 @@ it('returns a single transaction by id for the signal drawer', async () => {
     close();
   }
 });
+it('persists the net-worth estimate setting', async () => {
+  const { env, request, close } = await setup();
+  try {
+    const before = (await (
+      await dashboardApi(request('/api/settings', 'GET'), env)
+    ).json()) as any;
+    expect(before.estimate_net_worth).toBe(false);
+    await dashboardApi(request('/api/settings', 'PATCH', { estimate_net_worth: true }), env);
+    const after = (await (await dashboardApi(request('/api/settings', 'GET'), env)).json()) as any;
+    expect(after.estimate_net_worth).toBe(true);
+  } finally {
+    close();
+  }
+});
 it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);

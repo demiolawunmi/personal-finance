@@ -857,7 +857,7 @@ export async function categoryDeltas(db: Database, p: Period) {
   }
   return deltas;
 }
-export async function trends(db: Database, p: Period, months = 6) {
+export async function trends(db: Database, p: Period, months = 6, estimate = false) {
   const endMonth = p.end_date.slice(0, 7);
   const [financials, netWorthRows] = await Promise.all([
     all<{ month: string; income: number; spending: number; net: number }>(
@@ -874,25 +874,52 @@ export async function trends(db: Database, p: Period, months = 6) {
     ),
   ]);
   const netWorth = new Map(netWorthRows.map((r) => [r.month, r.net_worth]));
+  const rows = financials
+    .slice()
+    .reverse()
+    .map((m) => {
+      const snap = netWorth.has(m.month);
+      if (snap) return { ...m, net_worth: netWorth.get(m.month)! as number | null, estimated: false };
+      // Between snapshots carry the last known value by cash flow; before the
+      // first snapshot it is unknown unless the estimate is requested.
+      return { ...m, net_worth: null as number | null, estimated: false };
+    });
   let carried: number | null = null;
+  for (const row of rows) {
+    if (row.net_worth !== null) carried = row.net_worth;
+    else if (carried !== null) {
+      carried += row.net;
+      row.net_worth = carried;
+      row.estimated = true;
+    }
+  }
+  if (estimate) {
+    // Work backward from the first real snapshot: end-of-month net worth minus
+    // that month's net cash flow approximates the prior month's value.
+    const first = rows.findIndex((r) => r.net_worth !== null && !r.estimated);
+    if (first > 0)
+      for (let i = first - 1; i >= 0; i--) {
+        rows[i].net_worth = (rows[i + 1].net_worth as number) - rows[i + 1].net;
+        rows[i].estimated = true;
+      }
+  }
   return {
-    months: financials
-      .slice()
-      .reverse()
-      .map((m) => {
-        if (netWorth.has(m.month)) carried = netWorth.get(m.month)!;
-        else if (carried !== null) carried += m.net;
-        // Before the first recorded balance snapshot the net worth is unknown;
-        // do not fabricate it from cash flow (that produced nonsense values).
-        return {
-          month: m.month,
-          income: m.income / 1_000_000,
-          spending: m.spending / 1_000_000,
-          net: m.net / 1_000_000,
-          net_worth: carried === null ? null : carried / 1_000_000,
-        };
-      }),
+    months: rows.map((m) => ({
+      month: m.month,
+      income: m.income / 1_000_000,
+      spending: m.spending / 1_000_000,
+      net: m.net / 1_000_000,
+      net_worth: m.net_worth === null ? null : m.net_worth / 1_000_000,
+      estimated: m.estimated,
+    })),
   };
+}
+export async function getSettings(db: Database) {
+  const r = await first<{ estimate_net_worth: number }>(
+    db,
+    'SELECT estimate_net_worth FROM system_state WHERE id=1',
+  );
+  return { estimate_net_worth: !!r?.estimate_net_worth };
 }
 export async function balanceAttention(db: Database, p: Period) {
   const threshold = p.currency === 'CAD' || p.currency === 'USD' ? 300_000_000 : undefined;

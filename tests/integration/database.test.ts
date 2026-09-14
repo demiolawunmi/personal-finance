@@ -199,3 +199,40 @@ it('trends does not fabricate net worth before the first balance snapshot', asyn
     close();
   }
 });
+it('can estimate pre-snapshot net worth from cash flow when enabled', async () => {
+  const { db, close } = database();
+  try {
+    await seedAccounts(db);
+    await insert(db, 'transactions', tx('jun', -100000000, { date: '2026-06-15' })).run();
+    await insert(db, 'transactions', tx('jul', -100000000, { date: '2026-07-15' })).run();
+    await insert(db, 'transactions', tx('aug', -100000000, { date: '2026-08-15' })).run();
+    await insert(db, 'balance_snapshots', {
+      id: 's1',
+      account_id: 'checking',
+      current_amount_micros: 200000000,
+      currency: 'CAD',
+      observed_at: '2026-08-15T10:00:00.000Z',
+    }).run();
+    await rebuild(db);
+    const t = await trends(
+      db,
+      { start_date: '2026-08-01', end_date: '2026-08-31', currency: 'CAD' },
+      6,
+      true,
+    );
+    expect(t.months.find((m) => m.month === '2026-08')).toMatchObject({
+      net_worth: 200,
+      estimated: false,
+    });
+    expect(t.months.find((m) => m.month === '2026-07')).toMatchObject({
+      net_worth: 300,
+      estimated: true,
+    });
+    expect(t.months.find((m) => m.month === '2026-06')).toMatchObject({
+      net_worth: 400,
+      estimated: true,
+    });
+  } finally {
+    close();
+  }
+});

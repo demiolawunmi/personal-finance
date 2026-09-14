@@ -44,6 +44,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         setup_required: (await getSetupStatus(env)).status !== 'ready',
       });
     if (path === '/api/overview') {
+      const settings = await metrics.getSettings(env.DB);
       const [
         envelope,
         spending,
@@ -65,7 +66,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
         metrics.anomalies(env.DB, p),
         metrics.periodAttention(env.DB, p),
         metrics.largestTransactions(env.DB, p),
-        metrics.trends(env.DB, p, 6),
+        metrics.trends(env.DB, p, 6, settings.estimate_net_worth),
         metrics.categoryDeltas(env.DB, p),
         metrics.transactions(env.DB, p, { limit: 8 }),
         metrics.recurring(env.DB, currency),
@@ -247,6 +248,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       return Response.json(
         await all(env.DB, 'SELECT * FROM classification_rules ORDER BY priority,id'),
       );
+    if (path === '/api/settings') return Response.json(await metrics.getSettings(env.DB));
   }
   if (
     request.method === 'POST' &&
@@ -287,6 +289,18 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       auditStatement(env.DB, 'ANOMALY_REVIEWED', 'anomaly', review[1], s.user_id, {
         status: b.status,
       }),
+    ]);
+    return Response.json({ saved: true });
+  }
+  if (request.method === 'PATCH' && path === '/api/settings') {
+    const b = z.object({ estimate_net_worth: z.boolean() }).strict().parse(body ?? {});
+    await env.DB.batch([
+      stmt(
+        env.DB,
+        'UPDATE system_state SET estimate_net_worth=? WHERE id=1',
+        b.estimate_net_worth ? 1 : 0,
+      ),
+      auditStatement(env.DB, 'SETTINGS_CHANGED', 'system', null, s.user_id, b),
     ]);
     return Response.json({ saved: true });
   }
