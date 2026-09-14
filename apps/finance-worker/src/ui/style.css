@@ -715,6 +715,17 @@ pre {
   height: 132px;
   display: block;
 }
+.spark-empty {
+  height: 132px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: var(--sp-4);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--r-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
 
 .divider {
   height: 1px;

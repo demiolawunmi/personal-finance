@@ -2137,7 +2137,13 @@ function HeroCard({ d }: { d: Any }) {
               <span>{prevLabel}</span>
             </span>
           )}
-          <Sparkline values={series} />
+          {series.length >= 2 ? (
+            <Sparkline values={series} />
+          ) : (
+            <div className="spark-empty" role="note">
+              Net worth history charts here once more months of balances have synced.
+            </div>
+          )}
         </div>
         <div className="od-stack" style={gap('var(--sp-4)')}>
           <span className="eyebrow">Balance sheet</span>
