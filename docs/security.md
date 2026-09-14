@@ -6,7 +6,7 @@ The dashboard requires a random 256-bit session token, stored in an HttpOnly Sam
 
 MCP uses Cloudflare Workers OAuth Provider with a dedicated KV namespace, PKCE S256, one-hour access tokens and 30-day refresh tokens. The owner sees a consent page for every authorization with client identity, redirect and scopes. Token scopes are intersected with grant properties at request time. Tools outside those scopes are not registered. The Settings screen lists active client grants and allows the owner to revoke them. The reports scope explicitly grants report contents including aggregate balances and transaction anomaly signals. Transaction notes and raw provider IDs are excluded from MCP results.
 
-`/health` returns only infrastructure status. `queue: configured` means a binding exists; it is deliberately not a claim that queue delivery has been tested remotely. Static assets contain no financial data or credentials. HTTP responses are no-store and include CSP, nosniff, frame denial and no-referrer headers. There is no permissive CORS policy.
+`/health` returns only infrastructure status. `queue: configured` means a binding exists; it is deliberately not a claim that queue delivery has been tested remotely. Static assets contain no financial data or credentials; content-addressed build assets are served `public, max-age=31536000, immutable` and the SPA shell `public, max-age=0, must-revalidate` with an ETag. All `/api/*`, `/mcp`, OAuth and webhook responses remain `private, no-store` and include CSP, nosniff, frame denial and no-referrer headers. Institution logos are served from a session-gated endpoint as `private, max-age=604800` with a content ETag. There is no permissive CORS policy.
 
 ## Secrets
 

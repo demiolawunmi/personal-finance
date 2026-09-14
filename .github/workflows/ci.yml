@@ -15,9 +15,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm db:migrate
       - run: pnpm build
+        env:
+          WRANGLER_SEND_METRICS: false
+      - run: pnpm exec wrangler deploy --dry-run --env production -c apps/finance-worker/wrangler.jsonc
         env:
           WRANGLER_SEND_METRICS: false

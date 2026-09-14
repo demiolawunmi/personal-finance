@@ -9,11 +9,12 @@ afterEach(() => {
 });
 
 it('binds the Worker fetch function before calling Plaid', async () => {
-  const fetch = vi.fn(async () =>
-    new Response(JSON.stringify({ link_token: 'link-token' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }),
+  const fetch = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ link_token: 'link-token' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
   );
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   const client = new PlaidClient({

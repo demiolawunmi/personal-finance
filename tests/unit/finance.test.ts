@@ -123,7 +123,11 @@ describe('classification', () => {
         plaid_detailed_category: 'INSURANCE',
       }),
     ]);
-    expect(r.facts[1]).toMatchObject({ kind: 'refund', refund_of: 'dentist', category_id: 'health' });
+    expect(r.facts[1]).toMatchObject({
+      kind: 'refund',
+      refund_of: 'dentist',
+      category_id: 'health',
+    });
   });
   it('treats a claim inflow as a refund even without a matching purchase', () => {
     const r = classifyRows([

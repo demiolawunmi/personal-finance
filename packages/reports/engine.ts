@@ -7,11 +7,11 @@ import {
   anomalies,
   envelope,
   goals,
-  reconcile,
   periodAttention,
   largestTransactions,
   balanceAttention,
 } from '../analytics/service';
+import { reconcile } from '../db/derive';
 import { insert, revision, first, audit, type Database } from '../db/repository';
 import { previousPeriod, monthPeriod, addDays, today, type Period } from '../domain/periods';
 import { CALCULATION_VERSION } from '../domain/transactions';

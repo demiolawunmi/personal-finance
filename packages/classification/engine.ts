@@ -6,9 +6,7 @@ export function normalizeMerchant(t: Transaction, aliases: Alias[] = []) {
   if (alias) return alias.canonical_merchant;
   // Plaid reports both Uber Eats and Uber rides as merchant "Uber"; the raw
   // descriptor ("...UBEREATSTORON" vs "...UBERTRIPTORON") is the only signal.
-  const descriptor = [t.merchant_name, t.name, t.original_description]
-    .filter(Boolean)
-    .join(' ');
+  const descriptor = [t.merchant_name, t.name, t.original_description].filter(Boolean).join(' ');
   if (/uber\s*\*?\s*eats|ubereats/i.test(descriptor)) return 'Uber Eats';
   return raw
     .replace(/\s+\d{2}\/\d{2}$/, '')

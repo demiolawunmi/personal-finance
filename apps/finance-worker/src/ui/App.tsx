@@ -1651,8 +1651,7 @@ function CategoryDrawer({
               </span>
               <span
                 className={
-                  'row-amount tnum ' +
-                  (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                  'row-amount tnum ' + (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
                 }
               >
                 {fmtMoney(t.amount)}
@@ -1761,8 +1760,7 @@ function SignalDrawer({
               </span>
               <span
                 className={
-                  'row-amount tnum ' +
-                  (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                  'row-amount tnum ' + (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
                 }
               >
                 {fmtMoney(t.amount)}
@@ -2463,11 +2461,7 @@ function OverviewView({
               <div className="od-row" style={{ justifyContent: 'space-between' }}>
                 <span className="quiet">{label(a.type)}</span>
                 {a.has_logo ? (
-                  <img
-                    className="inst-logo"
-                    src={`/api/institutions/${a.item_id}/logo`}
-                    alt=""
-                  />
+                  <img className="inst-logo" src={`/api/institutions/${a.item_id}/logo`} alt="" />
                 ) : (
                   <Icon
                     name={a.type === 'credit' || a.type === 'loan' ? 'cards' : 'wallet'}
@@ -2690,7 +2684,9 @@ function TransactionsView(props: {
                       </span>
                     </td>
                     <td
-                      className={'num ' + (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')}
+                      className={
+                        'num ' + (num(t.amount) > 0 ? 'pos' : num(t.amount) < 0 ? 'neg' : '')
+                      }
                       data-label="Amount"
                     >
                       {fmtMoney(t.amount)}

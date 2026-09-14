@@ -15,6 +15,7 @@ import * as metrics from '../../../../packages/analytics/service';
 import { report } from '../../../../packages/reports/engine';
 import { getSetupStatus, setupRequired } from '../../../../packages/security/setup';
 import { sha256 } from '../../../../packages/security/crypto';
+import { reconcile } from '../../../../packages/db/derive';
 import { plaidRoute } from './plaid';
 export async function dashboardApi(request: Request, env: AppEnv) {
   const s = await requireSession(request, env),
@@ -238,7 +239,7 @@ export async function dashboardApi(request: Request, env: AppEnv) {
     if (path === '/api/data-health')
       return Response.json({
         ...(await metrics.dataHealth(env.DB)),
-        integrity: await metrics.reconcile(env.DB),
+        integrity: await reconcile(env.DB),
       });
     if (path === '/api/balances') return Response.json(await metrics.balances(env.DB, currency));
     if (path === '/api/accounts') return Response.json(await metrics.accounts(env.DB, currency));
@@ -317,7 +318,10 @@ export async function dashboardApi(request: Request, env: AppEnv) {
     return Response.json({ saved: true });
   }
   if (request.method === 'PATCH' && path === '/api/settings') {
-    const b = z.object({ estimate_net_worth: z.boolean() }).strict().parse(body ?? {});
+    const b = z
+      .object({ estimate_net_worth: z.boolean() })
+      .strict()
+      .parse(body ?? {});
     await env.DB.batch([
       stmt(
         env.DB,
@@ -358,7 +362,11 @@ export async function dashboardApi(request: Request, env: AppEnv) {
       stmt(env.DB, `UPDATE accounts SET ${sets.join(',')} WHERE id=?`, ...params),
       auditStatement(
         env.DB,
-        b.hidden !== undefined ? (b.hidden ? 'ACCOUNT_HIDDEN' : 'ACCOUNT_SHOWN') : 'ACCOUNT_RENAMED',
+        b.hidden !== undefined
+          ? b.hidden
+            ? 'ACCOUNT_HIDDEN'
+            : 'ACCOUNT_SHOWN'
+          : 'ACCOUNT_RENAMED',
         'account',
         account[1],
         s.user_id,

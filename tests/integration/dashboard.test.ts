@@ -376,9 +376,7 @@ it('returns full details for largest transactions so the drawer can render', asy
       }),
     ).run();
     await rebuild(db);
-    const d = (await (
-      await dashboardApi(request('/api/spending' + q, 'GET'), env)
-    ).json()) as any;
+    const d = (await (await dashboardApi(request('/api/spending' + q, 'GET'), env)).json()) as any;
     expect(d.largest[0]).toMatchObject({
       name: 'BIG STORE',
       merchant: 'Big Store',
@@ -410,9 +408,9 @@ it('returns a single transaction by id for the signal drawer', async () => {
       kind: 'spending',
     });
     expect(row.amount).toEqual({ amount: '-1.000000', currency: 'CAD' });
-    await expect(
-      dashboardApi(request('/api/transactions/missing', 'GET'), env),
-    ).rejects.toThrow('TRANSACTION_NOT_FOUND');
+    await expect(dashboardApi(request('/api/transactions/missing', 'GET'), env)).rejects.toThrow(
+      'TRANSACTION_NOT_FOUND',
+    );
   } finally {
     close();
   }
@@ -420,9 +418,7 @@ it('returns a single transaction by id for the signal drawer', async () => {
 it('persists the net-worth estimate setting', async () => {
   const { env, request, close } = await setup();
   try {
-    const before = (await (
-      await dashboardApi(request('/api/settings', 'GET'), env)
-    ).json()) as any;
+    const before = (await (await dashboardApi(request('/api/settings', 'GET'), env)).json()) as any;
     expect(before.estimate_net_worth).toBe(false);
     await dashboardApi(request('/api/settings', 'PATCH', { estimate_net_worth: true }), env);
     const after = (await (await dashboardApi(request('/api/settings', 'GET'), env)).json()) as any;
@@ -435,10 +431,7 @@ it('serves institution logos with a cacheable ETag and 304s', async () => {
   const { db, env, request, close } = await setup();
   try {
     const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
-    await db
-      .prepare("UPDATE plaid_items SET logo=? WHERE id='item'")
-      .bind(png)
-      .run();
+    await db.prepare("UPDATE plaid_items SET logo=? WHERE id='item'").bind(png).run();
     const res = await dashboardApi(request('/api/institutions/item/logo', 'GET'), env);
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('image/png');
@@ -456,7 +449,8 @@ it('serves institution logos with a cacheable ETag and 304s', async () => {
     close();
   }
 });
-it('explains missing local GitHub OAuth configuration at sign-in', async () => {  const { env, close } = await setup();
+it('explains missing local GitHub OAuth configuration at sign-in', async () => {
+  const { env, close } = await setup();
   try {
     const response = await oauthRoute(new Request(env.APP_ORIGIN + '/login'), env);
     expect(response?.status).toBe(503);

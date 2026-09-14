@@ -81,8 +81,7 @@ async function routes(request: Request, env: AppEnv): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
     // Mutations skip the revision fence; only reads need it (and the second
     // read only happens for reads).
-    if (request.method !== 'GET' && request.method !== 'HEAD')
-      return dashboardApi(request, env);
+    if (request.method !== 'GET' && request.method !== 'HEAD') return dashboardApi(request, env);
     const before = await revision(env.DB);
     const response = await dashboardApi(request, env);
     if ((await revision(env.DB)).data_revision !== before.data_revision)

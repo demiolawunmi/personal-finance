@@ -1,5 +1,5 @@
 import { all, first, type Database, revision } from '../db/repository';
-import { ensureDerived, reconcile } from '../db/derive';
+import { ensureDerived } from '../db/derive';
 import { money, safe, sum, ratio } from '../domain/money';
 import { validatePeriod, type Period, dayDiff, monthPeriod, today } from '../domain/periods';
 const moneyFmt: Record<string, Intl.NumberFormat> = {};
@@ -387,7 +387,8 @@ export async function transactions(db: Database, p: Period, s: Search = {}) {
       pending: !!t.pending,
       excluded: !!t.excluded,
     })),
-    next_cursor: rows.length > limit && last ? `${last.date}|${last.datetime ?? ''}|${last.id}` : null,
+    next_cursor:
+      rows.length > limit && last ? `${last.date}|${last.datetime ?? ''}|${last.id}` : null,
   };
 }
 export async function balances(db: Database, currency: string, asOf = new Date().toISOString()) {
@@ -705,7 +706,6 @@ export async function goals(db: Database, currency: string) {
     status: r.status,
   }));
 }
-export { reconcile };
 export async function periodAttention(db: Database, p: Period, asOf = today()) {
   await ensureDerived(db);
   const month = monthPeriod(p.end_date, p.currency);
@@ -883,7 +883,8 @@ export async function trends(db: Database, p: Period, months = 6, estimate = fal
     .reverse()
     .map((m) => {
       const snap = netWorth.has(m.month);
-      if (snap) return { ...m, net_worth: netWorth.get(m.month)! as number | null, estimated: false };
+      if (snap)
+        return { ...m, net_worth: netWorth.get(m.month)! as number | null, estimated: false };
       // Between snapshots carry the last known value by cash flow; before the
       // first snapshot it is unknown unless the estimate is requested.
       return { ...m, net_worth: null as number | null, estimated: false };
