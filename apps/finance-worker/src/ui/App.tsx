@@ -2110,8 +2110,11 @@ function HeroCard({ d }: { d: Any }) {
         return x.toISOString().slice(0, 7);
       })()
     : null;
-  const prevLabel =
-    prevMonth && prevMonth === expectedPrev ? 'vs. last month' : `vs. ${monthLabel(prevMonth!)}`;
+  const prevLabel = !prevMonth
+    ? ''
+    : prevMonth === expectedPrev
+      ? 'vs. last month'
+      : `vs. ${monthLabel(prevMonth)}`;
   return (
     <section className="card">
       <div className="hero">
