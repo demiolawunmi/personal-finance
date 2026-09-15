@@ -2,7 +2,9 @@
 
 A private, single-owner personal finance Worker: Plaid ingestion → D1 source records → deterministic classification and analytics → dashboard and OAuth-protected MCP.
 
-**Implemented locally; not deployed or connected to a real bank.** No credentials are included. Real GitHub OAuth, Plaid Sandbox/Production, and remote Cloudflare resources must be configured before live acceptance testing. The optional live Plaid test is skipped unless explicitly enabled.
+**Implemented locally; not deployed or connected to a real bank.** No credentials or personal data are included. Real GitHub OAuth, Plaid Sandbox/Production, and remote Cloudflare resources must be configured before live acceptance testing. The optional live Plaid test is skipped unless explicitly enabled.
+
+**Bring your own Plaid:** follow [Connect your own Plaid banking data](docs/plaid-setup.md) for the free Sandbox/Trial setup, GitHub owner gate, Cloudflare resources, secrets and deployment. The repository ships with placeholder infrastructure IDs only.
 
 ## Run locally
 
@@ -73,10 +75,10 @@ A live provider test is available separately. Export Sandbox credentials in your
 
 ## Deployment and limits
 
-Follow [the runbook](docs/runbook.md). Sandbox and Production bindings intentionally contain placeholder IDs. There is no auto-deployment workflow and no live environment was created by this implementation.
+Follow [the runbook](docs/runbook.md) for provisioning, operations and acceptance, and [the Plaid setup guide](docs/plaid-setup.md) to connect your own banking data. Sandbox and Production bindings intentionally contain placeholder IDs. There is no auto-deployment workflow and no live environment was created by this implementation.
 
 The rebuild currently recomputes derived facts for the full personal history in a background job and atomically publishes them. Interactive summaries query aggregates. Large initial histories must be load-tested against the selected Workers/D1 plan before production: full rebuild CPU, D1 batch payloads, and large sync durations can exceed free-plan limits. Infrastructure cost and Canadian institution coverage have **not** been verified on your accounts.
 
 Classification is deterministic and conservative, not perfect: ambiguous transfers and unknown credits need review. Recurring detection uses observation intervals and amount tolerance; it is not a guarantee of a future bill. Anomalies are review signals, never fraud findings. Cash flow is income less consumption spending, not account-balance movement. Current balance data comes from `/accounts/get`; this does not buy an on-demand Balance refresh.
 
-See [metrics](docs/metrics.md), [security](docs/security.md), [data model](docs/data-model.md), [MCP contract](docs/mcp-contract.md), and [acceptance status](docs/acceptance.md). The original brief is preserved in [architecture.md](docs/architecture.md); these implementation documents describe actual behavior and deliberate adjustments.
+See [Plaid setup](docs/plaid-setup.md), [runbook](docs/runbook.md), [metrics](docs/metrics.md), [security](docs/security.md), [data model](docs/data-model.md), [MCP contract](docs/mcp-contract.md), and [acceptance status](docs/acceptance.md). The original brief is preserved in [architecture.md](docs/architecture.md); these implementation documents describe actual behavior and deliberate adjustments.
