@@ -6,6 +6,18 @@ A private, single-owner personal finance Worker: Plaid ingestion → D1 source r
 
 **Bring your own Plaid:** follow [Connect your own Plaid banking data](docs/plaid-setup.md) for the free Sandbox/Trial setup, GitHub owner gate, Cloudflare resources, secrets and deployment. The repository ships with placeholder infrastructure IDs only.
 
+## Screenshots
+
+Captured from `pnpm demo` with synthetic data. No real accounts.
+
+| Overview                                                                                   | Transactions                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| ![Overview dashboard with net worth, cash flow and savings](docs/screenshots/overview.png) | ![Transaction list with search and filters](docs/screenshots/transactions.png) |
+| **Insights**                                                                               | **Recurring**                                                                  |
+| ![Spending insights by category](docs/screenshots/insights.png)                            | ![Recurring subscriptions and commitments](docs/screenshots/recurring.png)     |
+| **Budget**                                                                                 | **Accounts**                                                                   |
+| ![Budget pace and category limits](docs/screenshots/budget.png)                            | ![Connected institutions and balances](docs/screenshots/accounts.png)          |
+
 ## Run locally
 
 Requires Node 24+ and pnpm 11.19.0.
@@ -82,3 +94,7 @@ The rebuild currently recomputes derived facts for the full personal history in 
 Classification is deterministic and conservative, not perfect: ambiguous transfers and unknown credits need review. Recurring detection uses observation intervals and amount tolerance; it is not a guarantee of a future bill. Anomalies are review signals, never fraud findings. Cash flow is income less consumption spending, not account-balance movement. Current balance data comes from `/accounts/get`; this does not buy an on-demand Balance refresh.
 
 See [Plaid setup](docs/plaid-setup.md), [runbook](docs/runbook.md), [metrics](docs/metrics.md), [security](docs/security.md), [data model](docs/data-model.md), [MCP contract](docs/mcp-contract.md), and [acceptance status](docs/acceptance.md). The original brief is preserved in [architecture.md](docs/architecture.md); these implementation documents describe actual behavior and deliberate adjustments.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
