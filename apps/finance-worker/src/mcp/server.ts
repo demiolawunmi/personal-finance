@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from 'agents/mcp/server';
 import { z } from 'zod';
 import type { AppEnv } from '../env';
-import { TOOL_SCOPES, type AuthProps } from './scopes';
+import { SCOPES, TOOL_SCOPES, type AuthProps } from './scopes';
 import { periodShape, validatePeriod } from '../../../../packages/domain/periods';
 import * as metrics from '../../../../packages/analytics/service';
 import { compare, report } from '../../../../packages/reports/engine';
@@ -61,6 +61,9 @@ export function createFinanceServer(env: AppEnv, auth: AuthProps) {
           idempotentHint: true,
           openWorldHint: false,
         },
+        // ChatGPT/Codex read the per-tool auth policy; this SDK version only
+        // forwards `_meta`, so the scheme is declared there.
+        _meta: { securitySchemes: [{ type: 'oauth2', scopes: [TOOL_SCOPES[name]] }] },
       },
       async (input) => {
         try {
@@ -145,7 +148,20 @@ export function createFinanceServer(env: AppEnv, auth: AuthProps) {
             error instanceof Error && /^[A-Z_0-9]+$/.test(error.message)
               ? error.message
               : 'FINANCE_QUERY_FAILED';
-          return { isError: true, content: [{ type: 'text' as const, text: code }] };
+          const unauthorized = code === 'FORBIDDEN';
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: code }],
+            ...(unauthorized
+              ? {
+                  _meta: {
+                    'mcp/www_authenticate': [
+                      `Bearer resource_metadata="${env.APP_ORIGIN}/.well-known/oauth-protected-resource", error="insufficient_scope", error_description="Reauthorize with the ${TOOL_SCOPES[name]} scope to call ${name}."`,
+                    ],
+                  },
+                }
+              : {}),
+          };
         }
       },
     );
@@ -161,7 +177,15 @@ export async function mcpFetch(request: Request, env: AppEnv, ctx: ExecutionCont
       ? { ...original, scopes: original.scopes.filter((s) => verified.scope.includes(s)) }
       : null;
   if (!auth || auth.userId !== env.OWNER_GITHUB_ID || !Array.isArray(auth.scopes))
-    return Response.json({ error: 'FORBIDDEN' }, { status: 403 });
+    // Per the MCP authorization spec, an unusable token is rejected with a
+    // challenge so ChatGPT/Codex can re-run the OAuth flow.
+    return new Response(JSON.stringify({ error: 'UNAUTHORIZED' }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': `Bearer realm="OAuth", resource_metadata="${env.APP_ORIGIN}/.well-known/oauth-protected-resource/mcp", scope="${SCOPES.join(' ')}"`,
+      },
+    });
   return createMcpHandler(() => createFinanceServer(env, auth), {
     route: '/mcp',
     corsOptions: false,

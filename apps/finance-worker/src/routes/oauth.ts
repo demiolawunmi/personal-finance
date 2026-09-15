@@ -11,6 +11,7 @@ import {
   type Session,
 } from '../../../../packages/security/auth';
 import { invariant, readBody } from '../../../../packages/shared/errors';
+import { contentSecurityPolicy, formActionSource } from '../csp';
 import { SCOPES } from '../mcp/scopes';
 const escape = (s: string) =>
   s.replace(
@@ -33,15 +34,26 @@ async function consent(env: AppEnv, s: Session, request: AuthRequest) {
   const client = await env.OAUTH_PROVIDER.lookupClient(request.clientId);
   invariant(client, 400, 'UNKNOWN_CLIENT');
   const id = randomToken();
+  // Consent pages can outlive the session cookie that rendered them when two
+  // OAuth flows overlap. Bind the form to this one pending consent instead.
+  const consentCsrf = randomToken();
   await insert(env.DB, 'oauth_consents', {
     id,
     session_hash: s.id_hash,
+    csrf_hash: await sha256(consentCsrf),
     request_json: JSON.stringify(request),
     expires_at: new Date(Date.now() + 600000).toISOString(),
   }).run();
+  const redirectOrigin = formActionSource(request.redirectUri);
+  const formAction = redirectOrigin ? ["'self'", redirectOrigin] : ["'self'"];
   return new Response(
-    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Authorize finance access</title><body><main><h1>Allow ${escape(client.clientName ?? client.clientId)} to read your finances?</h1><p>Client: ${escape(client.clientId)}</p><p>Redirect: ${escape(request.redirectUri)}</p><ul>${scopes.map((s) => `<li>${escape(s)}</li>`).join('')}</ul><p>This grants access to private financial data. It cannot move money.</p><form action="/authorize/consent" method="post"><input type="hidden" name="id" value="${id}"><input type="hidden" name="csrf" value="${s.csrf_token}"><button name="decision" value="allow">Allow access</button><button name="decision" value="deny">Deny</button></form></main></body></html>`,
-    { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
+    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Authorize finance access</title><body><main><h1>Allow ${escape(client.clientName ?? client.clientId)} to read your finances?</h1><p>Client: ${escape(client.clientId)}</p><p>Redirect: ${escape(request.redirectUri)}</p><ul>${scopes.map((s) => `<li>${escape(s)}</li>`).join('')}</ul><p>This grants access to private financial data. It cannot move money.</p><form id="consent-form" action="/authorize/consent" method="post"><input type="hidden" name="id" value="${escape(id)}"><input type="hidden" name="csrf" value="${escape(consentCsrf)}"><button name="decision" value="allow">Allow access</button><button name="decision" value="deny">Deny</button></form><script src="/consent.js" defer></script></main></body></html>`,
+    {
+      headers: {
+        'Content-Type': 'text/html;charset=utf-8',
+        'Content-Security-Policy': contentSecurityPolicy(formAction),
+      },
+    },
   );
 }
 async function login(request: Request, env: AppEnv, auth: AuthRequest | null) {
@@ -132,14 +144,18 @@ export async function oauthRoute(request: Request, env: AppEnv): Promise<Respons
     invariant(userResponse.ok, 502, 'GITHUB_UNAVAILABLE');
     const user = (await userResponse.json()) as { id: number };
     invariant(String(user.id) === env.OWNER_GITHUB_ID, 403, 'OWNER_ONLY');
-    const sessionToken = randomToken(),
-      s: Session = {
+    let s = await session(request, env);
+    let sessionToken: string | null = null;
+    if (!s) {
+      sessionToken = randomToken();
+      s = {
         id_hash: await sha256(sessionToken),
         user_id: String(user.id),
         csrf_token: randomToken(),
         expires_at: new Date(Date.now() + 43200000).toISOString(),
       };
-    await insert(env.DB, 'sessions', s).run();
+      await insert(env.DB, 'sessions', s).run();
+    }
     const encrypted = JSON.parse(row.request_json);
     const auth = JSON.parse(
       await decrypt(
@@ -152,7 +168,8 @@ export async function oauthRoute(request: Request, env: AppEnv): Promise<Respons
     const response = auth
       ? await consent(env, s, auth)
       : new Response(null, { status: 302, headers: { Location: env.APP_ORIGIN + '/' } });
-    response.headers.append('Set-Cookie', setCookie('finance_session', sessionToken, env));
+    if (sessionToken)
+      response.headers.append('Set-Cookie', setCookie('finance_session', sessionToken, env));
     response.headers.append('Set-Cookie', setCookie('finance_oauth', '', env, 0));
     await audit(env.DB, 'OWNER_LOGIN', 'session', null, s.user_id);
     return response;
@@ -160,21 +177,68 @@ export async function oauthRoute(request: Request, env: AppEnv): Promise<Respons
   if (url.pathname === '/authorize/consent' && request.method === 'POST') {
     const s = await requireSession(request, env);
     const form = new URLSearchParams(await readBody(request));
-    requireCsrf(request, env, s, form.get('csrf'));
+    const id = form.get('id');
+    const token = form.get('csrf');
+    // OAuth clients that drive the consent form (Codex, ChatGPT connectors)
+    // submit it from a sandboxed context, producing a missing or opaque
+    // ("null") Origin. The single-use hashed consent token below is the
+    // load-bearing CSRF defense; a present cross-site Origin is still
+    // rejected as phishing depth.
+    const origin = request.headers.get('Origin');
+    const originOk = !origin || origin === env.APP_ORIGIN || origin === 'null';
+    const pending = id
+      ? await first<{
+          csrf_hash: string | null;
+          expires_at: string;
+          request_json: string;
+          user_id: string;
+        }>(
+          env.DB,
+          `SELECT c.csrf_hash,c.expires_at,c.request_json,s.user_id
+           FROM oauth_consents c JOIN sessions s ON s.id_hash=c.session_hash
+           WHERE c.id=?`,
+          id,
+        )
+      : null;
+    invariant(pending, 400, 'CONSENT_EXPIRED');
+    const tokenMatches = Boolean(
+      token && pending.csrf_hash && equal(await sha256(token), pending.csrf_hash),
+    );
+    const ownerMatches = pending.user_id === s.user_id;
+    if (!originOk || !tokenMatches || !ownerMatches) {
+      console.warn(
+        JSON.stringify({
+          event: 'OAUTH_CONSENT_REJECTED',
+          originPresent: Boolean(origin),
+          origin: origin ? origin.slice(0, 100) : null,
+          tokenPresent: Boolean(token),
+          tokenMatches,
+          ownerMatches,
+        }),
+      );
+    }
+    invariant(originOk && tokenMatches && ownerMatches, 403, 'INVALID_CSRF');
+    const now = new Date().toISOString();
+    invariant(pending.expires_at > now, 400, 'CONSENT_EXPIRED');
     const row = await stmt(
       env.DB,
-      'DELETE FROM oauth_consents WHERE id=? AND session_hash=? AND expires_at>? RETURNING request_json',
-      form.get('id'),
-      s.id_hash,
-      new Date().toISOString(),
+      'DELETE FROM oauth_consents WHERE id=? AND csrf_hash=? AND expires_at>? RETURNING request_json',
+      id,
+      pending.csrf_hash,
+      now,
     ).first<{ request_json: string }>();
     invariant(row, 400, 'CONSENT_EXPIRED');
     const auth = JSON.parse(row.request_json) as AuthRequest;
-    if (form.get('decision') !== 'allow') {
+    // Consent is only refused on an explicit deny. Embedded clients can submit
+    // the form programmatically, which omits the submit button's value; that is
+    // an approval, not a denial. The single-use token above already proves the
+    // owner reviewed this pending consent.
+    const decision = form.get('decision');
+    if (decision === 'deny') {
       const redirect = new URL(auth.redirectUri);
       redirect.searchParams.set('error', 'access_denied');
       redirect.searchParams.set('state', auth.state);
-      return Response.redirect(redirect.toString(), 302);
+      return Response.redirect(redirect.toString(), 303);
     }
     const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
       request: auth,
@@ -186,7 +250,7 @@ export async function oauthRoute(request: Request, env: AppEnv): Promise<Respons
     await audit(env.DB, 'MCP_ACCESS_GRANTED', 'oauth_client', auth.clientId, s.user_id, {
       scopes: auth.scope,
     });
-    return Response.redirect(redirectTo, 302);
+    return Response.redirect(redirectTo, 303);
   }
   if (url.pathname === '/api/logout' && request.method === 'POST') {
     const s = await requireSession(request, env);

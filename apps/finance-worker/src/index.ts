@@ -1,5 +1,6 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { ZodError } from 'zod';
+import { contentSecurityPolicy } from './csp';
 import type { AppEnv } from './env';
 import { oauthRoute } from './routes/oauth';
 import { dashboardApi } from './routes/dashboard-api';
@@ -168,11 +169,19 @@ export default {
     }
     secured.headers.set('X-Content-Type-Options', 'nosniff');
     secured.headers.set('Referrer-Policy', 'no-referrer');
-    secured.headers.set('X-Frame-Options', 'DENY');
-    secured.headers.set(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' https://cdn.plaid.com; frame-src https://*.plaid.com; connect-src 'self' https://*.plaid.com; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-    );
+    // Redirect responses carry no document. Frame-blocking headers on them
+    // would stop framed OAuth clients (ChatGPT connectors) from following the
+    // code handoff to a cross-origin redirect target.
+    if (response.status >= 300 && response.status < 400) {
+      secured.headers.delete('X-Frame-Options');
+      secured.headers.delete('Content-Security-Policy');
+    } else {
+      secured.headers.set('X-Frame-Options', 'DENY');
+      // The OAuth consent page narrows form-action to its client's redirect
+      // origin; every other document gets the default same-origin policy.
+      if (!secured.headers.has('Content-Security-Policy'))
+        secured.headers.set('Content-Security-Policy', contentSecurityPolicy());
+    }
     return secured;
   },
   queue: consume,
